@@ -42,31 +42,31 @@ const DESTINATIONS = [
   'Free in late September? Buenos Aires is perfect.',
 ]
 
-// Per-route info cards — one card per snippet, shown along the arc
-type CardInfo = { icon: string; text: string }
+// Per-route info cards — shown progressively during arc draw
+type CardInfo = { category: string; icon: string; text: string }
 type RouteInfo = {
   fromLabel: string; fromEmoji: string
   toLabel:   string; toEmoji:   string
-  cards:     [CardInfo, CardInfo, CardInfo]
+  cards:     [CardInfo, CardInfo, CardInfo, CardInfo]
 }
 
 const ROUTE_INFO: RouteInfo[] = [
   { fromLabel: 'New York',      fromEmoji: '🗽', toLabel: 'Lisbon',     toEmoji: '🌊',
-    cards: [{ icon: '🌡️', text: '24°C and sunny' }, { icon: '🌅', text: 'Golden hour: 8:47pm' }, { icon: '👥', text: 'Low crowds in May' }] },
+    cards: [{ category: 'WEATHER', icon: '🌡️', text: '24°C and sunny' }, { category: 'TIMING', icon: '🌅', text: 'Golden hour: 8:47pm' }, { category: 'CROWDS', icon: '👥', text: 'Low crowds in May' }, { category: 'FLIGHT', icon: '✈️', text: 'Direct: ~7 hrs' }] },
   { fromLabel: 'Tokyo',         fromEmoji: '🗼', toLabel: 'Sydney',     toEmoji: '🦘',
-    cards: [{ icon: '🥾', text: 'Perfect hiking weather' }, { icon: '🌅', text: 'Bondi sunset: 5:12pm' }, { icon: '✈️', text: 'Flight: ~9.5 hrs' }] },
+    cards: [{ category: 'WEATHER', icon: '🥾', text: 'Perfect hiking weather' }, { category: 'TIMING', icon: '🌅', text: 'Bondi sunset: 5:12pm' }, { category: 'FLIGHT', icon: '✈️', text: 'Flight: ~9.5 hrs' }, { category: 'COST', icon: '💰', text: 'AUD 180/night avg' }] },
   { fromLabel: 'London',        fromEmoji: '🎡', toLabel: 'Cape Town',  toEmoji: '🏔️',
-    cards: [{ icon: '🌡️', text: '28°C, beach season' }, { icon: '📸', text: 'Table Mountain: before 10am' }, { icon: '🦁', text: 'Safari peak season' }] },
+    cards: [{ category: 'WEATHER', icon: '🌡️', text: '28°C, beach season' }, { category: 'TIMING', icon: '📸', text: 'Table Mtn: before 10am' }, { category: 'WILDLIFE', icon: '🦁', text: 'Safari peak season' }, { category: 'FLIGHT', icon: '✈️', text: 'Flight: ~11 hrs' }] },
   { fromLabel: 'Singapore',     fromEmoji: '🦁', toLabel: 'Paris',      toEmoji: '🗼',
-    cards: [{ icon: '🌸', text: 'Gardens in full bloom' }, { icon: '🌡️', text: '22°C in Paris' }, { icon: '✈️', text: 'Direct flight: 13 hrs' }] },
+    cards: [{ category: 'NATURE', icon: '🌸', text: 'Gardens in full bloom' }, { category: 'WEATHER', icon: '🌡️', text: '22°C in Paris' }, { category: 'FLIGHT', icon: '✈️', text: 'Direct flight: 13 hrs' }, { category: 'CULTURE', icon: '🎨', text: 'Louvre — skip the line' }] },
   { fromLabel: 'Dubai',         fromEmoji: '🏙️', toLabel: 'Reykjavik',  toEmoji: '🌌',
-    cards: [{ icon: '🌌', text: 'Northern lights season' }, { icon: '🌡️', text: '4°C — pack layers' }, { icon: '💧', text: 'Geothermal hot springs' }] },
+    cards: [{ category: 'NATURE', icon: '🌌', text: 'Northern lights season' }, { category: 'WEATHER', icon: '🌡️', text: '4°C — pack layers' }, { category: 'ACTIVITY', icon: '💧', text: 'Geothermal hot springs' }, { category: 'FLIGHT', icon: '✈️', text: 'Via Helsinki: ~7 hrs' }] },
   { fromLabel: 'New York',      fromEmoji: '🗽', toLabel: 'Tokyo',      toEmoji: '🗼',
-    cards: [{ icon: '🌸', text: 'Cherry blossom peak' }, { icon: '📸', text: '6am at Fushimi Inari' }, { icon: '👥', text: 'Temple crowds: moderate' }] },
+    cards: [{ category: 'NATURE', icon: '🌸', text: 'Cherry blossom peak' }, { category: 'TIMING', icon: '📸', text: '6am at Fushimi Inari' }, { category: 'CROWDS', icon: '👥', text: 'Temple crowds: moderate' }, { category: 'FLIGHT', icon: '✈️', text: 'Non-stop: ~14 hrs' }] },
   { fromLabel: 'Buenos Aires',  fromEmoji: '💃', toLabel: 'London',     toEmoji: '🎡',
-    cards: [{ icon: '🎭', text: 'Tango festival in March' }, { icon: '🌡️', text: 'Late summer warmth' }, { icon: '✈️', text: 'Flight: ~14 hrs' }] },
+    cards: [{ category: 'CULTURE', icon: '🎭', text: 'Tango festival in March' }, { category: 'WEATHER', icon: '🌡️', text: 'Late summer warmth' }, { category: 'FLIGHT', icon: '✈️', text: 'Flight: ~14 hrs' }, { category: 'COST', icon: '💷', text: '£120/night avg' }] },
   { fromLabel: 'Bangkok',       fromEmoji: '🛕', toLabel: 'Lisbon',     toEmoji: '🌊',
-    cards: [{ icon: '🌡️', text: '28°C — bring sunscreen' }, { icon: '🌸', text: 'Jacaranda trees in bloom' }, { icon: '✈️', text: 'Stopover in Doha' }] },
+    cards: [{ category: 'WEATHER', icon: '🌡️', text: '28°C — bring sunscreen' }, { category: 'NATURE', icon: '🌸', text: 'Jacaranda trees in bloom' }, { category: 'FLIGHT', icon: '✈️', text: 'Stopover in Doha' }, { category: 'FOOD', icon: '🍷', text: 'Pastel de nata season' }] },
 ]
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -157,6 +157,7 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
   const card0Ref     = useRef<HTMLDivElement>(null)
   const card1Ref     = useRef<HTMLDivElement>(null)
   const card2Ref     = useRef<HTMLDivElement>(null)
+  const card3Ref     = useRef<HTMLDivElement>(null)
   // Photo circle refs — outer (positioning) and inner (sizing) per city
   const photoOuterRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const photoInnerRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -177,13 +178,13 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
     const W    = window.innerWidth
     const H    = window.innerHeight
     const SEGS = 80
-    // Arc t-values for the 3 info cards: 28%, 50%, 72%
-    const CARD_OFFS = [Math.floor(0.28 * SEGS), Math.floor(0.50 * SEGS), Math.floor(0.72 * SEGS)].map(i => i * 3)
+    // Arc t-values for the 4 info cards: 20%, 40%, 60%, 75%
+    const CARD_OFFS = [0.20, 0.40, 0.60, 0.75].map(t => Math.floor(t * SEGS) * 3)
 
     // DOM element handles (stable after first render)
     const fromEl     = fromLabelRef.current
     const toEl       = toLabelRef.current
-    const cardEls    = [card0Ref.current, card1Ref.current, card2Ref.current]
+    const cardEls    = [card0Ref.current, card1Ref.current, card2Ref.current, card3Ref.current]
     const photoOuters = photoOuterRefs.current
     const photoInners = photoInnerRefs.current
 
@@ -324,6 +325,12 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
       if (!el) return
       el.style.opacity = op.toFixed(3)
     }
+    // Apply position + opacity + scale + float offset to a card element
+    function setCardTransform(el: HTMLDivElement | null, x: number, y: number, op: number, scale: number, dy: number) {
+      if (!el) return
+      el.style.opacity = op.toFixed(3)
+      el.style.transform = `translate(${x.toFixed(1)}px, ${(y + dy).toFixed(1)}px) translate(-50%, calc(-100% - 8px)) scale(${scale.toFixed(3)})`
+    }
 
     function hideAll() {
       setOp(fromEl, 0); setOp(toEl, 0)
@@ -336,16 +343,20 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
     let tPhase = 0
 
     const INIT_DELAY = 0.5
-    const DRAW_DUR   = 2.5
-    const HOLD_DUR   = 2.0
-    const FADE_DUR   = 0.8
-    const PAUSE_DUR  = 0.5
+    const DRAW_DUR   = 4.0
+    const HOLD_DUR   = 2.5
+    const FADE_DUR   = 1.0
+    const PAUSE_DUR  = 0.8
+
+    // Track when each card became visible (absolute elapsed time), null = not yet shown
+    let cardAppearTimes: (number | null)[] = [null, null, null, null]
 
     function loadArc(idx: number) {
       arcGeom.setDrawRange(0, 0)
       arcPosArr.set(arcBufs[idx])
       arcAttr.needsUpdate = true
       arcGeom.computeBoundingSphere()
+      cardAppearTimes = [null, null, null, null]
       hideAll()
     }
 
@@ -380,6 +391,12 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
             const off = (cnt - 1) * 3
             leadArr[0] = arcPosArr[off]; leadArr[1] = arcPosArr[off + 1]; leadArr[2] = arcPosArr[off + 2]
             leadAttr.needsUpdate = true
+          }
+          // Record the first time each card's threshold vertex is passed
+          for (let ci = 0; ci < 4; ci++) {
+            if (cardAppearTimes[ci] === null && cnt * 3 > CARD_OFFS[ci]) {
+              cardAppearTimes[ci] = t
+            }
           }
           if (p >= 1) { matLead.opacity = 0; phase = 'holding'; tPhase = t }
 
@@ -433,26 +450,10 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
         const dt = t - tPhase
         const [fromKey, toKey] = [arcFrom, arcTo]
 
-        // Compute per-phase opacities
-        let labelOp: number
-        let cardOps: [number, number, number]
-
-        if (phase === 'drawing') {
-          labelOp = matLine.opacity
-          cardOps  = [0, 0, 0]
-        } else if (phase === 'holding') {
-          labelOp = 1
-          // Stagger cards: 0.1s, 0.4s, 0.7s — ramp over 0.35s each
-          cardOps = [
-            Math.min(Math.max((dt - 0.10) / 0.35, 0), 1),
-            Math.min(Math.max((dt - 0.40) / 0.35, 0), 1),
-            Math.min(Math.max((dt - 0.70) / 0.35, 0), 1),
-          ]
-        } else { // fading
-          const fp = Math.min(dt / FADE_DUR, 1)
-          labelOp  = 1 - fp
-          cardOps  = [1 - fp, 1 - fp, 1 - fp]
-        }
+        // Label opacity follows arc line opacity
+        const labelOp = phase === 'fading'
+          ? Math.max(1 - Math.min(dt / FADE_DUR, 1), 0)
+          : matLine.opacity
 
         // City labels — position + opacity
         const fv = cityVec[fromKey]
@@ -468,12 +469,20 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
           setOp(toEl, sp.vis ? labelOp : 0)
         }
 
-        // Info cards — position + staggered opacity
+        // Info cards — progressive appearance during draw, float + fade
+        const ENTRY_DUR = 0.35
+        const fadeFp = phase === 'fading' ? Math.min(dt / FADE_DUR, 1) : 0
         CARD_OFFS.forEach((off, ci) => {
           const el = cardEls[ci]; if (!el) return
           const sp = project(arcPosArr[off], arcPosArr[off + 1], arcPosArr[off + 2])
-          setPos(el, sp.x, sp.y, 'calc(-100% - 8px)')
-          setOp(el, sp.vis ? cardOps[ci] : 0)
+          const appearT = cardAppearTimes[ci]
+          if (!sp.vis || appearT === null) { setOp(el, 0); return }
+          const sinceAppear = t - appearT
+          const entryP = Math.min(sinceAppear / ENTRY_DUR, 1)
+          const op = entryP * (1 - fadeFp)
+          const scale = 0.85 + 0.15 * entryP
+          const dy = entryP >= 1 ? Math.sin(t * 2) * 3 * (1 - fadeFp) : 0
+          setCardTransform(el, sp.x, sp.y, op, scale, dy)
         })
       }
 
@@ -521,14 +530,17 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
   const cardBase: React.CSSProperties = {
     position: 'absolute', left: 0, top: 0,
     opacity: 0, pointerEvents: 'none', willChange: 'transform, opacity',
-    display: 'inline-flex', alignItems: 'center', gap: '6px',
-    backgroundColor: 'rgba(8,8,8,0.86)',
+    width: '170px',
+    backgroundColor: 'rgba(8,8,8,0.88)',
     backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-    border: '1px solid rgba(245,158,11,0.22)',
-    borderRadius: '8px',
-    padding: '7px 12px',
-    fontSize: '11px', color: 'rgba(255,255,255,0.88)',
-    fontFamily: 'var(--font-sora)', whiteSpace: 'nowrap',
+    borderLeft: '2px solid rgba(245,158,11,0.85)',
+    borderRight: '1px solid rgba(245,158,11,0.12)',
+    borderTop: '1px solid rgba(245,158,11,0.12)',
+    borderBottom: '1px solid rgba(245,158,11,0.12)',
+    borderRadius: '4px 8px 8px 4px',
+    padding: '8px 12px',
+    display: 'flex', flexDirection: 'column', gap: '3px',
+    fontFamily: 'var(--font-sora)',
   }
 
   return (
@@ -588,19 +600,17 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
         <span>{ri.toEmoji}</span><span>{ri.toLabel}</span>
       </div>
 
-      {/* Info cards — one snippet each, positioned along the arc */}
-      <div ref={card0Ref} style={cardBase}>
-        <span style={{ fontSize: '13px' }}>{ri.cards[0].icon}</span>
-        <span>{ri.cards[0].text}</span>
-      </div>
-      <div ref={card1Ref} style={cardBase}>
-        <span style={{ fontSize: '13px' }}>{ri.cards[1].icon}</span>
-        <span>{ri.cards[1].text}</span>
-      </div>
-      <div ref={card2Ref} style={cardBase}>
-        <span style={{ fontSize: '13px' }}>{ri.cards[2].icon}</span>
-        <span>{ri.cards[2].text}</span>
-      </div>
+      {/* Info cards — revealed progressively as arc draws */}
+      {([card0Ref, card1Ref, card2Ref, card3Ref] as React.RefObject<HTMLDivElement>[]).map((ref, ci) => (
+        <div key={ci} ref={ref} style={cardBase}>
+          <span style={{ fontSize: '10px', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
+            {ri.cards[ci].category}
+          </span>
+          <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.92)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {ri.cards[ci].icon} {ri.cards[ci].text}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }
