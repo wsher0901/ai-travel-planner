@@ -307,6 +307,86 @@ function buildArcPoints(a: THREE.Vector3, b: THREE.Vector3, segs = 80, lift = 0.
   })
 }
 
+// ── Row visual-enhancement helpers ──────────────────────────────────────────
+function parseTemp(val: string): { c: number; gradient: string; glowColor: string; icon: 'snowflake' | 'wind' | 'cloud-sun' | 'sun-pulse' | 'sun' | 'sun-heat' } {
+  const m = val.match(/-?\d+/)
+  const c = m ? parseInt(m[0], 10) : 20
+  const gradient = c <= 5
+    ? 'linear-gradient(135deg, rgba(56,140,220,0.22) 0%, rgba(30,80,160,0.12) 100%)'
+    : c <= 12 ? 'linear-gradient(135deg, rgba(50,180,180,0.20) 0%, rgba(30,120,140,0.10) 100%)'
+    : c <= 18 ? 'linear-gradient(135deg, rgba(200,170,60,0.18) 0%, rgba(140,120,30,0.08) 100%)'
+    : c <= 25 ? 'linear-gradient(135deg, rgba(245,158,11,0.20) 0%, rgba(200,120,0,0.08) 100%)'
+    : c <= 30 ? 'linear-gradient(135deg, rgba(230,120,30,0.22) 0%, rgba(180,70,10,0.10) 100%)'
+    : 'linear-gradient(135deg, rgba(220,60,40,0.24) 0%, rgba(160,30,20,0.10) 100%)'
+  const glowColor = c <= 5 ? 'rgba(56,140,220,0.3)' : c <= 12 ? 'rgba(50,180,180,0.25)' : c <= 18 ? 'rgba(200,170,60,0.25)' : c <= 25 ? 'rgba(245,158,11,0.3)' : c <= 30 ? 'rgba(230,120,30,0.35)' : 'rgba(220,60,40,0.35)'
+  const icon = c <= 5 ? 'snowflake' as const : c <= 12 ? 'wind' as const : c <= 18 ? 'cloud-sun' as const : c <= 25 ? 'sun-pulse' as const : c <= 30 ? 'sun' as const : 'sun-heat' as const
+  return { c, gradient, glowColor, icon }
+}
+
+function parseCrowd(val: string): { filled: number; color: string; dotColor: string } {
+  const l = val.toLowerCase()
+  if (l.startsWith('low')) return { filled: 2, color: 'rgba(74,222,128,0.85)', dotColor: 'rgba(74,222,128,0.9)' }
+  if (l.startsWith('moderate')) return { filled: 3, color: 'rgba(245,158,11,0.85)', dotColor: 'rgba(245,158,11,0.9)' }
+  return { filled: 5, color: 'rgba(248,113,113,0.85)', dotColor: 'rgba(248,113,113,0.9)' }
+}
+
+function parseCost(val: string): number {
+  const m = val.replace(/,/g, '').match(/\d+/)
+  const n = m ? parseInt(m[0], 10) : 1000
+  if (n <= 700) return 1
+  if (n <= 1500) return 2
+  if (n <= 2200) return 3
+  return 4
+}
+
+function parseGoldenHour(val: string): number {
+  const m = val.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+  if (!m) return 0.5
+  let h = parseInt(m[1], 10)
+  const min = parseInt(m[2], 10)
+  const pm = m[3].toUpperCase() === 'PM'
+  if (pm && h !== 12) h += 12
+  if (!pm && h === 12) h = 0
+  const totalMin = h * 60 + min
+  // 6am = 360min, 9pm = 1260min → range 900min
+  return Math.max(0, Math.min(1, (totalMin - 360) / 900))
+}
+
+function TempIcon({ type, size = 46 }: { type: string; size?: number }) {
+  const s = size, o = 0.7, c = 'rgba(255,255,255,0.9)'
+  if (type === 'snowflake') return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" opacity={o}>
+      <line x1="12" y1="2" x2="12" y2="22" /><line x1="2" y1="12" x2="22" y2="12" />
+      <line x1="5" y1="5" x2="19" y2="19" /><line x1="19" y1="5" x2="5" y2="19" />
+    </svg>
+  )
+  if (type === 'wind') return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" opacity={o}>
+      <path d="M3 8h12a3 3 0 100-3" /><path d="M3 16h16a3 3 0 010 3" /><path d="M3 12h9a3 3 0 110 3" />
+    </svg>
+  )
+  if (type === 'cloud-sun') return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" opacity={o}>
+      <circle cx="10" cy="10" r="3" /><path d="M10 3v2" /><path d="M10 15v2" /><path d="M3 10h2" /><path d="M15 10h2" />
+      <path d="M18 18H8a4 4 0 01-.5-7.97" />
+    </svg>
+  )
+  if (type === 'sun-heat') return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" opacity={o}>
+      <circle cx="12" cy="12" r="4" /><path d="M12 2v3" /><path d="M12 19v3" /><path d="M2 12h3" /><path d="M19 12h3" />
+      <path d="M5.6 5.6l1.8 1.8" /><path d="M16.6 16.6l1.8 1.8" /><path d="M18.4 5.6l-1.8 1.8" /><path d="M7.4 16.6l-1.8 1.8" />
+      <path d="M8 20s1-2 4-2 4 2 4 2" />
+    </svg>
+  )
+  // sun / sun-pulse — same icon
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.5" strokeLinecap="round" opacity={o}>
+      <circle cx="12" cy="12" r="4" /><path d="M12 2v3" /><path d="M12 19v3" /><path d="M2 12h3" /><path d="M19 12h3" />
+      <path d="M5.6 5.6l1.8 1.8" /><path d="M16.6 16.6l1.8 1.8" /><path d="M18.4 5.6l-1.8 1.8" /><path d="M7.4 16.6l-1.8 1.8" />
+    </svg>
+  )
+}
+
 // ── Typing indicator — three pulsing dots ─────────────────────────────────────
 function TypingDots() {
   return (
@@ -323,19 +403,18 @@ function TypingDots() {
   )
 }
 
-// ── Chat bubbles — two-bubble chat interface above the destination card ────────
-function ChatInputBubble({ arcIdx }: { arcIdx: number }) {
+// ── Chat command bar content — clean text on glass, no bubble backgrounds ─────
+function ChatBarContent({ arcIdx }: { arcIdx: number }) {
   const query    = CHAT_PROMPTS[arcIdx]
   const response = SYSTEM_RESPONSES[arcIdx]
 
   const [displayed,           setDisplayed]           = useState('')
   const [typingDone,          setTypingDone]          = useState(false)
-  const [systemBubbleShown,   setSystemBubbleShown]   = useState(false)
+  const [systemShown,         setSystemShown]         = useState(false)
   const [line1Shown,          setLine1Shown]          = useState(false)
   const [line2IndicatorShown, setLine2IndicatorShown] = useState(false)
   const [line2Shown,          setLine2Shown]          = useState(false)
 
-  // Type character by character at 35ms/char
   useEffect(() => {
     if (typingDone) return
     if (displayed.length < query.length) {
@@ -345,51 +424,45 @@ function ChatInputBubble({ arcIdx }: { arcIdx: number }) {
     setTypingDone(true)
   }, [displayed, typingDone, query])
 
-  // System bubble slides in 300ms after typing finishes — shows first typing indicator
   useEffect(() => {
     if (!typingDone) return
-    const id = setTimeout(() => setSystemBubbleShown(true), 300)
+    const id = setTimeout(() => setSystemShown(true), 300)
     return () => clearTimeout(id)
   }, [typingDone])
 
-  // Line 1 text appears 800ms after system bubble (replaces dots)
   useEffect(() => {
-    if (!systemBubbleShown) return
+    if (!systemShown) return
     const id = setTimeout(() => setLine1Shown(true), 800)
     return () => clearTimeout(id)
-  }, [systemBubbleShown])
+  }, [systemShown])
 
-  // Second typing indicator appears 1s after line 1
   useEffect(() => {
     if (!line1Shown) return
     const id = setTimeout(() => setLine2IndicatorShown(true), 1000)
     return () => clearTimeout(id)
   }, [line1Shown])
 
-  // Line 2 text appears 800ms after second indicator
   useEffect(() => {
     if (!line2IndicatorShown) return
     const id = setTimeout(() => setLine2Shown(true), 800)
     return () => clearTimeout(id)
   }, [line2IndicatorShown])
 
-  return (
-    <div style={{ width: '380px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+  const tShadow = '0 1px 16px rgba(0,0,0,0.95), 0 0 40px rgba(0,0,0,0.8)'
 
-      {/* ── User bubble (left-aligned, amber tint) ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+      {/* ── User message row ── */}
+      <div>
         <span style={{
-          fontSize: '10px', color: 'rgba(255,255,255,0.28)',
-          fontFamily: 'var(--font-sora)', marginBottom: '4px', letterSpacing: '0.04em',
+          fontSize: '10px', color: 'rgba(255,255,255,0.25)',
+          fontFamily: 'var(--font-sora)', letterSpacing: '0.04em',
+          display: 'block', marginBottom: '5px', textShadow: tShadow,
         }}>You</span>
         <div style={{
-          maxWidth: '85%',
-          backgroundColor: 'rgba(245,158,11,0.12)',
-          border: '1px solid rgba(245,158,11,0.2)',
-          borderRadius: '16px 16px 16px 4px',
-          padding: '12px 16px',
-          fontSize: '14px', color: '#ffffff',
-          fontFamily: 'var(--font-sora)', lineHeight: 1.55,
+          fontSize: '14px', color: 'rgba(255,255,255,0.85)',
+          fontFamily: 'var(--font-sora)', lineHeight: 1.5, textShadow: tShadow,
         }}>
           {displayed}
           {!typingDone && (
@@ -403,34 +476,26 @@ function ChatInputBubble({ arcIdx }: { arcIdx: number }) {
         </div>
       </div>
 
-      {/* ── System bubble (slides in after typing, shows two lines sequentially) ── */}
+      {/* ── Roam response row ── */}
       <AnimatePresence>
-        {systemBubbleShown && (
+        {systemShown && (
           <motion.div
-            initial={{ opacity: 0, x: -14 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
           >
             {/* Roam label */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
-              <Compass size={12} color="rgba(245,158,11,0.65)" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
+              <Compass size={12} color="rgba(245,158,11,0.65)" style={{ filter: 'drop-shadow(0 1px 8px rgba(0,0,0,0.9))' }} />
               <span style={{
                 fontSize: '10px', color: 'rgba(245,158,11,0.65)',
-                fontFamily: 'var(--font-sora)', fontWeight: 500, letterSpacing: '0.04em',
+                fontFamily: 'var(--font-sora)', fontWeight: 500, letterSpacing: '0.04em', textShadow: tShadow,
               }}>Roam</span>
             </div>
 
-            <div style={{
-              maxWidth: '85%',
-              backgroundColor: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              borderRadius: '4px 16px 16px 16px',
-              padding: '12px 16px',
-              display: 'flex', flexDirection: 'column', gap: '8px',
-            }}>
-              {/* Slot 1: typing dots → line 1 */}
+            {/* Response lines */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <AnimatePresence mode="wait">
                 {!line1Shown ? (
                   <motion.div key="dots1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
@@ -442,14 +507,13 @@ function ChatInputBubble({ arcIdx }: { arcIdx: number }) {
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
-                    style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-sora)', lineHeight: 1.5 }}
+                    style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-sora)', lineHeight: 1.5, textShadow: tShadow }}
                   >
                     {response.line1}
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* Slot 2: typing dots → line 2 (only after line 1 is visible) */}
               <AnimatePresence mode="wait">
                 {line2IndicatorShown && !line2Shown && (
                   <motion.div key="dots2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
@@ -462,7 +526,7 @@ function ChatInputBubble({ arcIdx }: { arcIdx: number }) {
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
-                    style={{ fontSize: '13px', fontWeight: 500, color: 'rgba(245,158,11,0.85)', fontFamily: 'var(--font-sora)', lineHeight: 1.5 }}
+                    style={{ fontSize: '13px', fontWeight: 500, color: 'rgba(245,158,11,0.85)', fontFamily: 'var(--font-sora)', lineHeight: 1.5, textShadow: tShadow }}
                   >
                     {response.line2}
                   </motion.div>
@@ -910,48 +974,63 @@ function GlobeSection({ onReady, onArcChange, onPhaseChange, onCardVisible }: {
   )
 }
 
+// ── Chat overlay — frosted-glass command bar at bottom center ─────────────────
+function ChatOverlay({ arcIdx, arcPhase }: { arcIdx: number; arcPhase: ArcPhase }) {
+  const chatVisible = arcPhase === 'chatting' || arcPhase === 'drawing' || arcPhase === 'holding'
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: '120px', left: '50%', transform: 'translateX(-50%)',
+      zIndex: 20, pointerEvents: 'none',
+      width: '680px', maxWidth: '88vw',
+    }}>
+      <AnimatePresence mode="wait">
+        {chatVisible && (
+          <motion.div
+            key={`chat-${arcIdx}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div style={{
+              borderLeft: '2px solid rgba(245,158,11,0.55)',
+              paddingLeft: '14px',
+            }}>
+              <ChatBarContent arcIdx={arcIdx} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 // ── Destination intelligence panel ───────────────────────────────────────────
 function DestinationPanel({ arcIdx, arcPhase, cardVisible }: {
   arcIdx: number; arcPhase: ArcPhase; cardVisible: boolean
 }) {
   const dest = DESTINATION_DATA[arcIdx]
-  // Chat bubble: visible from chatting through holding; hides on fading
-  const chatVisible = arcPhase === 'chatting' || arcPhase === 'drawing' || arcPhase === 'holding'
-  // Card: only once arc is 30% drawn (cardVisible flag) and still drawing/holding
   const showCard = cardVisible && (arcPhase === 'drawing' || arcPhase === 'holding')
 
   return (
     <div
       className="absolute top-0 bottom-0 hidden lg:flex items-start"
-      style={{ right: '5%', pointerEvents: 'none', paddingTop: '10vh' }}
+      style={{ right: '5%', pointerEvents: 'none', paddingTop: '8vh', paddingBottom: '3vh' }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '380px' }}>
-
-        {/* Chat input bubble — independent AnimatePresence, appears first during chatting */}
-        <AnimatePresence mode="wait">
-          {chatVisible && (
-            <motion.div
-              key={`chat-${arcIdx}`}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <ChatInputBubble arcIdx={arcIdx} />
-            </motion.div>
-          )}
-        </AnimatePresence>
+      <div style={{ display: 'flex', flexDirection: 'column', width: '380px', maxHeight: 'calc(89vh)', overflow: 'hidden' }}>
 
         {/* Destination card — appears only when arc reaches 30% drawn */}
-        <AnimatePresence mode="wait">
-          {showCard && (
-            <motion.div
-              key={`card-${arcIdx}`}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            >
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <AnimatePresence mode="wait">
+            {showCard && (
+              <motion.div
+                key={`card-${arcIdx}`}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              >
             <div
             style={{
               width: '380px',
@@ -963,6 +1042,8 @@ function DestinationPanel({ arcIdx, arcPhase, cardVisible }: {
               borderRadius: '16px',
               display: 'flex',
               flexDirection: 'column' as const,
+              maxHeight: '100%',
+              overflow: 'hidden',
             }}
           >
             {/* Hero image — always at top, never moves */}
@@ -989,7 +1070,7 @@ function DestinationPanel({ arcIdx, arcPhase, cardVisible }: {
             </div>
 
             {/* Data rows — staggered reveal, type-based styling */}
-            <div style={{ padding: '10px 18px 16px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
+            <div className="no-scrollbar" style={{ padding: '10px 18px 16px', display: 'flex', flexDirection: 'column', gap: '7px', flex: 1, minHeight: 0, overflowY: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' as React.CSSProperties['msOverflowStyle'] }}>
               {dest.rows.map((row, i) => {
                 const type = ROW_TYPE[row.category] ?? 'B'
                 const labelEl = (
@@ -1001,7 +1082,109 @@ function DestinationPanel({ arcIdx, arcPhase, cardVisible }: {
                   </div>
                 )
                 let inner: React.ReactNode
-                if (type === 'D') {
+
+                if (row.category === 'TEMPERATURE') {
+                  const { c, gradient, glowColor, icon } = parseTemp(row.value)
+                  const pct = Math.max(0, Math.min(100, ((c + 10) / 50) * 100))
+                  inner = (
+                    <div style={{
+                      background: gradient, borderRadius: '8px', padding: '12px 14px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: '70px',
+                      position: 'relative', overflow: 'hidden',
+                    }}>
+                      {/* Radial glow on icon side */}
+                      <div style={{ position: 'absolute', right: '-10px', top: '50%', transform: 'translateY(-50%)', width: '90px', height: '90px', borderRadius: '50%', background: `radial-gradient(circle, ${glowColor} 0%, transparent 70%)`, pointerEvents: 'none' }} />
+                      <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
+                        {labelEl}
+                        <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff', fontFamily: 'var(--font-sora)', marginBottom: '8px', letterSpacing: '-0.01em' }}>{row.value}</div>
+                        <div style={{ position: 'relative', width: '130px', height: '8px', borderRadius: '4px', background: 'linear-gradient(to right, #3b82f6, #06b6d4, #f59e0b, #ef4444)', boxShadow: '0 0 6px rgba(0,0,0,0.3)' }}>
+                          <div style={{ position: 'absolute', top: '-3px', left: `${pct}%`, width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#fff', border: '2px solid rgba(0,0,0,0.25)', transform: 'translateX(-50%)', boxShadow: '0 0 6px rgba(255,255,255,0.5)' }} />
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0, marginLeft: '10px', position: 'relative', zIndex: 1 }}>
+                        <TempIcon type={icon} />
+                      </div>
+                    </div>
+                  )
+                } else if (row.category === 'CROWD LEVEL') {
+                  const { filled, color, dotColor } = parseCrowd(row.value)
+                  const crowdWord = row.value.includes('—') ? row.value.split('—')[1].trim() : row.value
+                  const levelWord = row.value.toLowerCase().startsWith('low') ? 'Low' : row.value.toLowerCase().startsWith('moderate') ? 'Moderate' : 'High'
+                  inner = (
+                    <div style={{ borderLeft: '2px solid rgba(245,158,11,0.15)', paddingLeft: '12px' }}>
+                      {labelEl}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0', position: 'relative' }}>
+                          {/* Track line behind dots */}
+                          <div style={{ position: 'absolute', top: '50%', left: '5px', right: '5px', height: '2px', backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: '1px', transform: 'translateY(-50%)' }} />
+                          {[0, 1, 2, 3, 4].map(j => (
+                            <div key={j} style={{
+                              width: '11px', height: '11px', borderRadius: '50%', position: 'relative', zIndex: 1,
+                              backgroundColor: j < filled ? dotColor : 'rgba(255,255,255,0.12)',
+                              boxShadow: j < filled ? `0 0 6px ${dotColor}, 0 0 2px ${dotColor}` : 'none',
+                              margin: '0 2px',
+                            }} />
+                          ))}
+                        </div>
+                        <span style={{ fontSize: '13px', fontFamily: 'var(--font-sora)' }}>
+                          <span style={{ color, fontWeight: 600 }}>{levelWord}</span>
+                          {crowdWord !== levelWord && <span style={{ color: 'rgba(255,255,255,0.5)' }}> — {crowdWord}</span>}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                } else if (row.category === 'GOLDEN HOUR') {
+                  const pos = parseGoldenHour(row.value)
+                  const gradId = `gh-grad-${i}`
+                  // Semicircle arc: 100px wide, lowered so labels fit below
+                  const cx = 50, cy = 38, r = 34
+                  const angle = Math.PI - pos * Math.PI
+                  const dotX = cx + r * Math.cos(angle)
+                  const dotY = cy - r * Math.sin(angle)
+                  inner = (
+                    <div style={{ borderLeft: '2px solid rgba(245,158,11,0.15)', paddingLeft: '12px' }}>
+                      {labelEl}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <svg width="100" height="58" viewBox="0 0 100 58">
+                          <defs>
+                            <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
+                              <stop offset="0%" stopColor="#fde68a" />
+                              <stop offset="50%" stopColor="#7dd3fc" />
+                              <stop offset="100%" stopColor="#fb923c" />
+                            </linearGradient>
+                          </defs>
+                          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`} fill="none" stroke={`url(#${gradId})`} strokeWidth="3" strokeLinecap="round" />
+                          <circle cx={dotX} cy={dotY} r="5" fill="#f59e0b" opacity="0.9" />
+                          <circle cx={dotX} cy={dotY} r="8" fill="#f59e0b" opacity="0.2" />
+                          {/* Time labels below arc baseline */}
+                          <text x={cx - r} y={cy + 14} textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="9" fontFamily="var(--font-sora)">6am</text>
+                          <text x={cx + r} y={cy + 14} textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="9" fontFamily="var(--font-sora)">9pm</text>
+                        </svg>
+                        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)', fontFamily: 'var(--font-sora)' }}>{row.value}</div>
+                      </div>
+                    </div>
+                  )
+                } else if (row.category === 'EST. TRIP COST') {
+                  const dots = parseCost(row.value)
+                  const costText = row.value.includes('—') ? row.value.split('—')[0].trim() : row.value
+                  const costDesc = row.value.includes('—') ? row.value.split('—')[1].trim() : ''
+                  inner = (
+                    <div style={{ backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '10px 14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      {labelEl}
+                      <div style={{ display: 'flex', gap: '6px', marginBottom: '6px', marginTop: '2px' }}>
+                        {[0, 1, 2, 3].map(j => (
+                          <span key={j} style={{
+                            fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-sora)',
+                            color: j < dots ? '#f59e0b' : 'rgba(255,255,255,0.15)',
+                            textShadow: j < dots ? '0 0 8px rgba(245,158,11,0.4)' : 'none',
+                          }}>$</span>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#fff', fontFamily: 'var(--font-sora)' }}>{costText}</div>
+                      {costDesc && <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--font-sora)', marginTop: '2px' }}>{costDesc}</div>}
+                    </div>
+                  )
+                } else if (type === 'D') {
                   inner = (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(245,158,11,0.08)', borderRadius: '8px', padding: '10px 14px' }}>
                       <Calendar size={14} color={ICON_COLOR} style={{ flexShrink: 0 }} />
@@ -1009,13 +1192,6 @@ function DestinationPanel({ arcIdx, arcPhase, cardVisible }: {
                         <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.32)', fontFamily: 'var(--font-sora)', marginBottom: '2px' }}>Best time to visit</div>
                         <div style={{ fontSize: '15px', fontWeight: 600, color: '#fff', fontFamily: 'var(--font-sora)' }}>{row.value}</div>
                       </div>
-                    </div>
-                  )
-                } else if (type === 'A') {
-                  inner = (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '10px 14px' }}>
-                      {ROW_ICONS[row.category]}
-                      <div style={{ fontSize: '16px', fontWeight: 600, color: 'rgba(255,255,255,0.92)', fontFamily: 'var(--font-sora)' }}>{row.value}</div>
                     </div>
                   )
                 } else if (type === 'B') {
@@ -1055,7 +1231,8 @@ function DestinationPanel({ arcIdx, arcPhase, cardVisible }: {
             </div>
             </motion.div>
           )}
-        </AnimatePresence>
+          </AnimatePresence>
+        </div>
 
       </div>
     </div>
@@ -1253,6 +1430,9 @@ export default function LoginPage() {
       >
         <GlobeSection onArcChange={setArcIdx} onPhaseChange={setArcPhase} onCardVisible={() => setCardVisible(true)} />
       </motion.div>
+
+      {/* Chat overlay — bottom-center over globe */}
+      <ChatOverlay arcIdx={arcIdx} arcPhase={arcPhase} />
 
       {/* Destination panel — right side, desktop only */}
       <div className="absolute inset-0 z-[2]" style={{ pointerEvents: 'none' }}>
