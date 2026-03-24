@@ -910,148 +910,348 @@ function GlobeSection({ onReady, onArcChange, onPhaseChange, onCardVisible }: {
   )
 }
 
-// ── Destination intelligence panel ───────────────────────────────────────────
+// ── Story Scroll helpers ──────────────────────────────────────────────────────
+function parseTemp(v: string) { const m = v.match(/(-?\d+)°C/); return m ? parseInt(m[1], 10) : 20 }
+function parseGoldenHourPos(v: string) {
+  const m = v.match(/(\d+):(\d+)\s*(AM|PM)/i); if (!m) return 0.8
+  let h = parseInt(m[1], 10); const min = parseInt(m[2], 10); const pm = m[3].toUpperCase() === 'PM'
+  if (pm && h !== 12) h += 12; if (!pm && h === 12) h = 0
+  return Math.max(0, Math.min(1, (h * 60 + min - 360) / 900))  // 360=6am, 900=15h span
+}
+function parseCostLevel(v: string) {
+  const m = v.match(/\$(\d[\d,]*)/); if (!m) return 2
+  const a = parseInt(m[1].replace(/,/g, ''), 10)
+  return a <= 650 ? 1 : a <= 1500 ? 2 : a <= 2200 ? 3 : 4
+}
+function parseCrowdLevel(v: string) {
+  const l = v.toLowerCase(); return l.includes('high') ? 4 : l.includes('moderate') ? 3 : 2
+}
+
+// ── Weather SVG icon ──────────────────────────────────────────────────────────
+function WeatherIcon({ temp }: { temp: number }) {
+  const op: React.CSSProperties = { opacity: 0.5 }
+  if (temp <= 5) return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style={op}>
+      <line x1="18" y1="3"  x2="18" y2="33" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+      <line x1="3"  y1="18" x2="33" y2="18" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+      <line x1="7"  y1="7"  x2="29" y2="29" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+      <line x1="29" y1="7"  x2="7"  y2="29" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+      {[{cx:18,cy:3},{cx:18,cy:33},{cx:3,cy:18},{cx:33,cy:18},{cx:7,cy:7},{cx:29,cy:29},{cx:29,cy:7},{cx:7,cy:29}].map((p,i)=>(
+        <circle key={i} cx={p.cx} cy={p.cy} r="2.2" fill="white"/>
+      ))}
+    </svg>
+  )
+  if (temp <= 12) return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style={op}>
+      <path d="M4 11 Q10 7 20 11 Q26 14 28 11 Q28 9 25 9" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M4 18 Q12 14 22 18 Q28 21 30 18 Q30 15 27 15" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M4 25 Q10 21 18 25 Q24 28 26 25 Q26 22 23 22" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  )
+  if (temp <= 18) return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style={op}>
+      <circle cx="26" cy="13" r="5" stroke="white" strokeWidth="1.8"/>
+      {[0,60,120,180,240,300].map(d => { const r=d*Math.PI/180; return (
+        <line key={d} x1={26+8*Math.cos(r)} y1={13+8*Math.sin(r)} x2={26+11*Math.cos(r)} y2={13+11*Math.sin(r)} stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+      )})}
+      <path d="M8 26 Q6 26 5 24 Q4 19 10 18 Q10 13 16 13 Q22 13 22 18 Q25 17 25 21 Q25 24 22 25 Q20 26 18 26 Z" stroke="white" strokeWidth="1.6"/>
+    </svg>
+  )
+  if (temp <= 25) return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style={op}>
+      <circle cx="18" cy="18" r="5.5" fill="white"/>
+      {[0,45,90,135,180,225,270,315].map(d => { const r=d*Math.PI/180; return (
+        <motion.line key={d}
+          x1={18+9*Math.cos(r)}  y1={18+9*Math.sin(r)}
+          x2={18+13*Math.cos(r)} y2={18+13*Math.sin(r)}
+          stroke="white" strokeWidth="2" strokeLinecap="round"
+          animate={{ opacity:[0.45,1,0.45] }}
+          transition={{ duration:1.8, repeat:Infinity, delay:d/450, ease:'easeInOut' }}
+        />
+      )})}
+    </svg>
+  )
+  if (temp <= 30) return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style={op}>
+      <circle cx="18" cy="18" r="7" fill="white"/>
+      {[0,45,90,135,180,225,270,315].map(d => { const r=d*Math.PI/180; return (
+        <line key={d} x1={18+11*Math.cos(r)} y1={18+11*Math.sin(r)} x2={18+15.5*Math.cos(r)} y2={18+15.5*Math.sin(r)} stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+      )})}
+    </svg>
+  )
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style={op}>
+      <circle cx="18" cy="12" r="5.5" fill="white"/>
+      {[0,45,90,135,180,225,270,315].map(d => { const r=d*Math.PI/180; return (
+        <line key={d} x1={18+9*Math.cos(r)} y1={12+9*Math.sin(r)} x2={18+13*Math.cos(r)} y2={12+13*Math.sin(r)} stroke="white" strokeWidth="2" strokeLinecap="round"/>
+      )})}
+      <path d="M10 27 Q12 24 14 27 Q16 30 18 27" stroke="white" strokeWidth="1.6" strokeLinecap="round"/>
+      <path d="M18 27 Q20 24 22 27 Q24 30 26 27" stroke="white" strokeWidth="1.6" strokeLinecap="round"/>
+      <path d="M13 32 Q15 29 17 32 Q19 35 21 32 Q23 29 25 32" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+// ── Specialized row content ───────────────────────────────────────────────────
+function TempRowContent({ value }: { value: string }) {
+  const temp = parseTemp(value)
+  const pos  = Math.max(0, Math.min(1, temp / 35))
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', minHeight:'54px' }}>
+      <div>
+        <div style={{ fontSize:'15px', fontWeight:600, color:'rgba(255,255,255,0.92)', fontFamily:'var(--font-sora)', marginBottom:'8px' }}>{value}</div>
+        <div style={{ position:'relative', width:'120px', height:'6px' }}>
+          <div style={{ width:'100%', height:'100%', borderRadius:'9999px', background:'linear-gradient(to right,#60a5fa,#34d399,#fbbf24,#f87171)' }}/>
+          <div style={{ position:'absolute', top:'50%', left:`${pos*100}%`, transform:'translate(-50%,-50%)', width:'10px', height:'10px', borderRadius:'50%', backgroundColor:'#fff', boxShadow:'0 0 6px rgba(0,0,0,0.6)' }}/>
+        </div>
+      </div>
+      <WeatherIcon temp={temp}/>
+    </div>
+  )
+}
+
+function CrowdRowContent({ value }: { value: string }) {
+  const filled = parseCrowdLevel(value)
+  return (
+    <div>
+      <div style={{ display:'flex', gap:'5px', marginBottom:'5px', alignItems:'center' }}>
+        {Array.from({length:5}).map((_,i) => (
+          <div key={i} style={{ width:'8px', height:'8px', borderRadius:'50%', backgroundColor: i<filled ? '#ffffff' : 'rgba(255,255,255,0.15)' }}/>
+        ))}
+      </div>
+      <div style={{ fontSize:'13px', color:'rgba(255,255,255,0.75)', fontFamily:'var(--font-sora)' }}>{value}</div>
+    </div>
+  )
+}
+
+function GoldenHourRowContent({ value, uid }: { value: string; uid: string }) {
+  const pos   = parseGoldenHourPos(value)
+  const theta = Math.PI * (1 - pos)
+  const dotX  = +(50 + 45 * Math.cos(theta)).toFixed(2)
+  const dotY  = +(45 - 45 * Math.sin(theta)).toFixed(2)
+  const gId   = `gh-${uid}`
+  return (
+    <div>
+      <div style={{ position:'relative', width:'100px', height:'52px', marginBottom:'4px' }}>
+        <svg width="100" height="50" viewBox="0 0 100 50" style={{ overflow:'visible' }}>
+          <defs>
+            <linearGradient id={gId} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stopColor="#fef08a"/>
+              <stop offset="50%"  stopColor="#93c5fd"/>
+              <stop offset="100%" stopColor="#fb923c"/>
+            </linearGradient>
+          </defs>
+          <path d="M 5 45 A 45 45 0 0 1 95 45" fill="none" stroke={`url(#${gId})`} strokeWidth="3" strokeLinecap="round" opacity="0.7"/>
+          <circle cx={dotX} cy={dotY} r="5"  fill="#f59e0b"/>
+          <circle cx={dotX} cy={dotY} r="9"  fill="#f59e0b" fillOpacity="0.22"/>
+        </svg>
+        <span style={{ position:'absolute', bottom:'0', left:'3px',  fontSize:'9px', color:'rgba(255,255,255,0.3)', fontFamily:'var(--font-sora)' }}>6am</span>
+        <span style={{ position:'absolute', bottom:'0', right:'3px', fontSize:'9px', color:'rgba(255,255,255,0.3)', fontFamily:'var(--font-sora)' }}>9pm</span>
+      </div>
+      <div style={{ fontSize:'13px', color:'rgba(255,255,255,0.75)', fontFamily:'var(--font-sora)' }}>{value}</div>
+    </div>
+  )
+}
+
+function CostRowContent({ value }: { value: string }) {
+  const level = parseCostLevel(value)
+  return (
+    <div>
+      <div style={{ display:'flex', gap:'3px', marginBottom:'5px', alignItems:'baseline' }}>
+        {Array.from({length:4}).map((_,i) => (
+          <span key={i} style={{ fontSize:'16px', fontWeight:700, color: i<level ? '#f59e0b' : 'rgba(255,255,255,0.1)', fontFamily:'var(--font-sora)', lineHeight:1 }}>$</span>
+        ))}
+      </div>
+      <div style={{ fontSize:'13px', color:'rgba(255,255,255,0.75)', fontFamily:'var(--font-sora)' }}>{value}</div>
+    </div>
+  )
+}
+
+// ── Row content dispatcher ────────────────────────────────────────────────────
+function renderStoryRow(row: DestRow, isActive: boolean, uid: string): React.ReactNode {
+  const type = ROW_TYPE[row.category] ?? 'B'
+  const labelEl = (
+    <div style={{ display:'flex', alignItems:'center', gap:'5px', marginBottom:'4px' }}>
+      {ROW_ICONS[row.category]}
+      <span style={{ fontSize:'10px', color:'rgba(255,255,255,0.32)', textTransform:'uppercase', letterSpacing:'0.07em', fontFamily:'var(--font-sora)' }}>
+        {row.category}
+      </span>
+    </div>
+  )
+  if (row.category === 'TEMPERATURE') return (
+    <div style={{ backgroundColor:'rgba(255,255,255,0.03)', borderRadius:'10px', padding:'10px 14px' }}>
+      {labelEl}<TempRowContent value={row.value}/>
+    </div>
+  )
+  if (row.category === 'CROWD LEVEL') return (
+    <div>{labelEl}<CrowdRowContent value={row.value}/></div>
+  )
+  if (row.category === 'GOLDEN HOUR') return (
+    <div>{labelEl}<GoldenHourRowContent value={row.value} uid={uid}/></div>
+  )
+  if (row.category === 'EST. TRIP COST') return (
+    <div style={{ backgroundColor:'rgba(245,158,11,0.05)', borderRadius:'10px', padding:'10px 14px' }}>
+      {labelEl}<CostRowContent value={row.value}/>
+    </div>
+  )
+  if (type === 'D') return (
+    <div style={{ display:'flex', alignItems:'center', gap:'10px', backgroundColor:'rgba(245,158,11,0.08)', borderRadius:'8px', padding:'10px 14px' }}>
+      <Calendar size={14} color={ICON_COLOR} style={{ flexShrink:0 }}/>
+      <div>
+        <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.32)', fontFamily:'var(--font-sora)', marginBottom:'2px' }}>Best time to visit</div>
+        <div style={{ fontSize: isActive ? '16px' : '14px', fontWeight:600, color:'#fff', fontFamily:'var(--font-sora)' }}>{row.value}</div>
+      </div>
+    </div>
+  )
+  if (type === 'C') return (
+    <div>
+      {labelEl}
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+        {row.value.split(',').map((tag,j) => (
+          <span key={j} style={{ backgroundColor:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.15)', borderRadius:'9999px', padding:'3px 10px', fontSize:'12px', color:'rgba(255,255,255,0.78)', fontFamily:'var(--font-sora)' }}>
+            {tag.trim()}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+  return (
+    <div style={{ borderLeft:'2px solid rgba(245,158,11,0.15)', paddingLeft:'12px' }}>
+      {labelEl}
+      <div style={{ fontSize: isActive ? '15px' : '13px', color:'rgba(255,255,255,0.85)', fontFamily:'var(--font-sora)' }}>{row.value}</div>
+    </div>
+  )
+}
+
+// ── Story Scroll Card ─────────────────────────────────────────────────────────
+function StoryScrollCard({ dest, arcIdx }: { dest: DestData; arcIdx: number }) {
+  const [visibleCount, setVisibleCount] = useState(0)
+  const [heroShrunk,   setHeroShrunk]   = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setVisibleCount(0)
+    setHeroShrunk(false)
+    const timers: ReturnType<typeof setTimeout>[] = []
+    dest.rows.forEach((_, i) => {
+      timers.push(setTimeout(() => {
+        setVisibleCount(i + 1)
+        if (i === 0) setHeroShrunk(true)
+      }, 300 + i * 500))
+    })
+    return () => timers.forEach(clearTimeout)
+  }, [arcIdx])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!scrollRef.current || visibleCount === 0) return
+    const el = scrollRef.current
+    const id = setTimeout(() => { el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }) }, 80)
+    return () => clearTimeout(id)
+  }, [visibleCount])
+
+  return (
+    <div style={{
+      width: '380px',
+      maxHeight: '70vh',
+      display: 'flex',
+      flexDirection: 'column',
+      backgroundColor: 'rgba(10,10,10,0.75)',
+      backdropFilter: 'blur(24px)',
+      WebkitBackdropFilter: 'blur(24px)',
+      border: '1px solid rgba(255,255,255,0.06)',
+      borderRadius: '16px',
+      overflow: 'hidden',
+    }}>
+      {/* Hero — explicit initial:300 so Framer Motion doesn't start from 0 */}
+      <motion.div
+        initial={{ height: 300 }}
+        animate={{ height: heroShrunk ? 140 : 300 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        style={{ position: 'relative', width: '100%', overflow: 'hidden', flexShrink: 0 }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={dest.photo} alt={dest.city}
+          style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
+        />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '90px', background: 'linear-gradient(to bottom,transparent,rgba(10,10,10,0.97))', pointerEvents: 'none' }}/>
+        <div style={{ position: 'absolute', bottom: '12px', left: '18px', right: '18px' }}>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: '#fff', fontFamily: 'var(--font-sora)', lineHeight: 1.1 }}>{dest.city}</div>
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--font-sora)', marginTop: '3px' }}>{dest.country}</div>
+        </div>
+      </motion.div>
+
+      {/* Rows — flex:1 + minHeight:0 is the correct pattern for a scrollable flex child */}
+      <div
+        ref={scrollRef}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          scrollbarWidth: 'none',
+        }}
+      >
+        <div style={{ padding: '10px 18px 20px' }}>
+          {dest.rows.slice(0, visibleCount).map((row, i) => {
+            const isActive = i === visibleCount - 1
+            return (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: isActive ? 1 : 0.5, y: 0 }}
+                transition={{ duration: 0.35, ease: 'easeOut' }}
+                style={{ marginBottom: '10px' }}
+              >
+                {renderStoryRow(row, isActive, String(arcIdx))}
+              </motion.div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Destination panel ─────────────────────────────────────────────────────────
 function DestinationPanel({ arcIdx, arcPhase, cardVisible }: {
   arcIdx: number; arcPhase: ArcPhase; cardVisible: boolean
 }) {
   const dest = DESTINATION_DATA[arcIdx]
-  // Chat bubble: visible from chatting through holding; hides on fading
   const chatVisible = arcPhase === 'chatting' || arcPhase === 'drawing' || arcPhase === 'holding'
-  // Card: only once arc is 30% drawn (cardVisible flag) and still drawing/holding
   const showCard = cardVisible && (arcPhase === 'drawing' || arcPhase === 'holding')
 
   return (
     <div
       className="absolute top-0 bottom-0 hidden lg:flex items-center"
-      style={{ right: '5%', pointerEvents: 'none' }}
+      style={{ right:'5%', pointerEvents:'none' }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '380px' }}>
+      <div style={{ display:'flex', flexDirection:'column', gap:'16px', width:'380px' }}>
 
-        {/* Chat input bubble — independent AnimatePresence, appears first during chatting */}
+        {/* Chat bubble — unchanged */}
         <AnimatePresence mode="wait">
           {chatVisible && (
             <motion.div
               key={`chat-${arcIdx}`}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity:0, y:16 }}
+              animate={{ opacity:1, y:0 }}
+              exit={{ opacity:0, y:-10 }}
+              transition={{ duration:0.45, ease:[0.16,1,0.3,1] }}
             >
-              <ChatInputBubble arcIdx={arcIdx} />
+              <ChatInputBubble arcIdx={arcIdx}/>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Destination card — appears only when arc reaches 30% drawn */}
+        {/* Story scroll card */}
         <AnimatePresence mode="wait">
           {showCard && (
             <motion.div
               key={`card-${arcIdx}`}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity:0, y:30 }}
+              animate={{ opacity:1, y:0 }}
+              exit={{ opacity:0, y:-20 }}
+              transition={{ duration:0.6, ease:[0.16,1,0.3,1] }}
             >
-            <div
-            style={{
-              width: '380px',
-              backgroundColor: 'rgba(10,10,10,0.82)',
-              backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              borderLeft: '2px solid rgba(245,158,11,0.55)',
-              borderRadius: '16px',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Hero image — always visible when card enters */}
-            <div style={{ position: 'relative', width: '100%', height: '200px', overflow: 'hidden' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={dest.photo}
-                alt={dest.city}
-                style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
-              />
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, height: '85px',
-                background: 'linear-gradient(to bottom, transparent, rgba(10,10,10,0.97))',
-                pointerEvents: 'none',
-              }} />
-              <div style={{ position: 'absolute', bottom: '12px', left: '18px', right: '18px' }}>
-                <div style={{ fontSize: '28px', fontWeight: 700, color: '#fff', fontFamily: 'var(--font-sora)', lineHeight: 1.1 }}>
-                  {dest.city}
-                </div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--font-sora)', marginTop: '3px' }}>
-                  {dest.country}
-                </div>
-              </div>
-            </div>
-
-            {/* Data rows — staggered reveal, type-based styling */}
-            <div style={{ padding: '10px 18px 16px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
-              {dest.rows.map((row, i) => {
-                const type = ROW_TYPE[row.category] ?? 'B'
-                const labelEl = (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '3px' }}>
-                    {ROW_ICONS[row.category]}
-                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.32)', textTransform: 'uppercase', letterSpacing: '0.07em', fontFamily: 'var(--font-sora)' }}>
-                      {row.category}
-                    </span>
-                  </div>
-                )
-                let inner: React.ReactNode
-                if (type === 'D') {
-                  inner = (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(245,158,11,0.08)', borderRadius: '8px', padding: '10px 14px' }}>
-                      <Calendar size={14} color={ICON_COLOR} style={{ flexShrink: 0 }} />
-                      <div>
-                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.32)', fontFamily: 'var(--font-sora)', marginBottom: '2px' }}>Best time to visit</div>
-                        <div style={{ fontSize: '15px', fontWeight: 600, color: '#fff', fontFamily: 'var(--font-sora)' }}>{row.value}</div>
-                      </div>
-                    </div>
-                  )
-                } else if (type === 'A') {
-                  inner = (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '10px 14px' }}>
-                      {ROW_ICONS[row.category]}
-                      <div style={{ fontSize: '16px', fontWeight: 600, color: 'rgba(255,255,255,0.92)', fontFamily: 'var(--font-sora)' }}>{row.value}</div>
-                    </div>
-                  )
-                } else if (type === 'B') {
-                  inner = (
-                    <div style={{ borderLeft: '2px solid rgba(245,158,11,0.15)', paddingLeft: '12px' }}>
-                      {labelEl}
-                      <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.85)', fontFamily: 'var(--font-sora)' }}>{row.value}</div>
-                    </div>
-                  )
-                } else {
-                  // type C — pill tags
-                  inner = (
-                    <div>
-                      {labelEl}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {row.value.split(',').map((tag, j) => (
-                          <span key={j} style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: '9999px', padding: '3px 10px', fontSize: '12px', color: 'rgba(255,255,255,0.78)', fontFamily: 'var(--font-sora)' }}>
-                            {tag.trim()}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                }
-                return (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: [0.3,0.8,1.3,1.8,2.3,2.8,3.3,3.8,4.3][i] ?? 0.3, duration: 0.35, ease: 'easeOut' }}
-                  >
-                    {inner}
-                  </motion.div>
-                )
-              })}
-            </div>
-            </div>
+              <StoryScrollCard dest={dest} arcIdx={arcIdx}/>
             </motion.div>
           )}
         </AnimatePresence>
