@@ -3,70 +3,288 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { Mail } from 'lucide-react'
+import { Mail, Thermometer, Users, Camera, Sun, TrendingUp, Compass, Clock, CreditCard, Calendar, Plane } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 // ── City coordinates [lat, lng] ─────────────────────────────────────────────
 const CITY_COORDS: Record<string, [number, number]> = {
-  nyc:         [ 40.71, -74.01],
-  lisbon:      [ 38.71,  -9.14],
-  tokyo:       [ 35.68, 139.69],
-  sydney:      [-33.87, 151.21],
-  london:      [ 51.51,  -0.13],
-  capeTown:    [-33.93,  18.42],
-  singapore:   [  1.35, 103.82],
-  paris:       [ 48.86,   2.35],
-  dubai:       [ 25.20,  55.27],
-  reykjavik:   [ 64.13, -21.89],
-  buenosAires: [-34.60, -58.38],
-  bangkok:     [ 13.75, 100.52],
+  nyc:          [ 40.71,  -74.01],
+  lisbon:       [ 38.71,   -9.14],
+  tokyo:        [ 35.68,  139.69],
+  sydney:       [-33.87,  151.21],
+  london:       [ 51.51,   -0.13],
+  capeTown:     [-33.93,   18.42],
+  singapore:    [  1.35,  103.82],
+  paris:        [ 48.86,    2.35],
+  dubai:        [ 25.20,   55.27],
+  reykjavik:    [ 64.13,  -21.89],
+  buenosAires:  [-34.60,  -58.38],
+  bangkok:      [ 13.75,  100.52],
+  hawaii:       [ 21.31, -157.86],
+  chicago:      [ 41.88,  -87.63],
+  miami:        [ 25.76,  -80.19],
+  sanFrancisco: [ 37.77, -122.42],
+  denver:       [ 39.74, -104.99],
+  seattle:      [ 47.61, -122.33],
 }
 
 const ARC_PAIRS: [string, string][] = [
-  ['nyc',         'lisbon'   ],
-  ['tokyo',       'sydney'   ],
-  ['london',      'capeTown' ],
-  ['singapore',   'paris'    ],
-  ['dubai',       'reykjavik'],
-  ['nyc',         'tokyo'    ],
-  ['buenosAires', 'london'   ],
-  ['bangkok',     'lisbon'   ],
+  ['nyc',          'lisbon'      ],  // 0
+  ['tokyo',        'sydney'      ],  // 1
+  ['london',       'capeTown'    ],  // 2
+  ['nyc',          'hawaii'      ],  // 3
+  ['dubai',        'reykjavik'   ],  // 4
+  ['nyc',          'tokyo'       ],  // 5
+  ['chicago',      'miami'       ],  // 6
+  ['sanFrancisco', 'buenosAires' ],  // 7
+  ['nyc',          'paris'       ],  // 8
+  ['denver',       'seattle'     ],  // 9
 ]
 
-const DESTINATIONS = [
-  'Free in mid-May? You should be in Lisbon.',
-  'A week in July from NYC? Head to the Azores.',
-  'Long weekend in October? Kyoto is calling.',
-  'Two weeks in January? Try Cape Town.',
-  'Spring break with family? Costa Rica awaits.',
-  'Free in late September? Buenos Aires is perfect.',
-]
+// Arc phase type shared between GlobeSection and DestinationPanel
+type ArcPhase = 'idle' | 'chatting' | 'drawing' | 'holding' | 'fading' | 'pause'
 
-// Per-route info cards — shown progressively during arc draw
-type CardInfo = { category: string; icon: string; text: string }
+// Per-route label info for globe overlay
 type RouteInfo = {
   fromLabel: string; fromEmoji: string
   toLabel:   string; toEmoji:   string
-  cards:     [CardInfo, CardInfo, CardInfo, CardInfo]
 }
 
 const ROUTE_INFO: RouteInfo[] = [
-  { fromLabel: 'New York',      fromEmoji: '🗽', toLabel: 'Lisbon',     toEmoji: '🌊',
-    cards: [{ category: 'WEATHER', icon: '🌡️', text: '24°C and sunny' }, { category: 'TIMING', icon: '🌅', text: 'Golden hour: 8:47pm' }, { category: 'CROWDS', icon: '👥', text: 'Low crowds in May' }, { category: 'FLIGHT', icon: '✈️', text: 'Direct: ~7 hrs' }] },
-  { fromLabel: 'Tokyo',         fromEmoji: '🗼', toLabel: 'Sydney',     toEmoji: '🦘',
-    cards: [{ category: 'WEATHER', icon: '🥾', text: 'Perfect hiking weather' }, { category: 'TIMING', icon: '🌅', text: 'Bondi sunset: 5:12pm' }, { category: 'FLIGHT', icon: '✈️', text: 'Flight: ~9.5 hrs' }, { category: 'COST', icon: '💰', text: 'AUD 180/night avg' }] },
-  { fromLabel: 'London',        fromEmoji: '🎡', toLabel: 'Cape Town',  toEmoji: '🏔️',
-    cards: [{ category: 'WEATHER', icon: '🌡️', text: '28°C, beach season' }, { category: 'TIMING', icon: '📸', text: 'Table Mtn: before 10am' }, { category: 'WILDLIFE', icon: '🦁', text: 'Safari peak season' }, { category: 'FLIGHT', icon: '✈️', text: 'Flight: ~11 hrs' }] },
-  { fromLabel: 'Singapore',     fromEmoji: '🦁', toLabel: 'Paris',      toEmoji: '🗼',
-    cards: [{ category: 'NATURE', icon: '🌸', text: 'Gardens in full bloom' }, { category: 'WEATHER', icon: '🌡️', text: '22°C in Paris' }, { category: 'FLIGHT', icon: '✈️', text: 'Direct flight: 13 hrs' }, { category: 'CULTURE', icon: '🎨', text: 'Louvre — skip the line' }] },
-  { fromLabel: 'Dubai',         fromEmoji: '🏙️', toLabel: 'Reykjavik',  toEmoji: '🌌',
-    cards: [{ category: 'NATURE', icon: '🌌', text: 'Northern lights season' }, { category: 'WEATHER', icon: '🌡️', text: '4°C — pack layers' }, { category: 'ACTIVITY', icon: '💧', text: 'Geothermal hot springs' }, { category: 'FLIGHT', icon: '✈️', text: 'Via Helsinki: ~7 hrs' }] },
-  { fromLabel: 'New York',      fromEmoji: '🗽', toLabel: 'Tokyo',      toEmoji: '🗼',
-    cards: [{ category: 'NATURE', icon: '🌸', text: 'Cherry blossom peak' }, { category: 'TIMING', icon: '📸', text: '6am at Fushimi Inari' }, { category: 'CROWDS', icon: '👥', text: 'Temple crowds: moderate' }, { category: 'FLIGHT', icon: '✈️', text: 'Non-stop: ~14 hrs' }] },
-  { fromLabel: 'Buenos Aires',  fromEmoji: '💃', toLabel: 'London',     toEmoji: '🎡',
-    cards: [{ category: 'CULTURE', icon: '🎭', text: 'Tango festival in March' }, { category: 'WEATHER', icon: '🌡️', text: 'Late summer warmth' }, { category: 'FLIGHT', icon: '✈️', text: 'Flight: ~14 hrs' }, { category: 'COST', icon: '💷', text: '£120/night avg' }] },
-  { fromLabel: 'Bangkok',       fromEmoji: '🛕', toLabel: 'Lisbon',     toEmoji: '🌊',
-    cards: [{ category: 'WEATHER', icon: '🌡️', text: '28°C — bring sunscreen' }, { category: 'NATURE', icon: '🌸', text: 'Jacaranda trees in bloom' }, { category: 'FLIGHT', icon: '✈️', text: 'Stopover in Doha' }, { category: 'FOOD', icon: '🍷', text: 'Pastel de nata season' }] },
+  { fromLabel: 'New York',      fromEmoji: '🗽', toLabel: 'Lisbon',       toEmoji: '🌊' },
+  { fromLabel: 'Tokyo',         fromEmoji: '🗼', toLabel: 'Sydney',       toEmoji: '🦘' },
+  { fromLabel: 'London',        fromEmoji: '🎡', toLabel: 'Cape Town',    toEmoji: '🏔️' },
+  { fromLabel: 'New York',      fromEmoji: '🗽', toLabel: 'Hawaii',       toEmoji: '🌺' },
+  { fromLabel: 'Dubai',         fromEmoji: '🏙️', toLabel: 'Reykjavik',   toEmoji: '🌌' },
+  { fromLabel: 'New York',      fromEmoji: '🗽', toLabel: 'Tokyo',        toEmoji: '🗼' },
+  { fromLabel: 'Chicago',       fromEmoji: '🌬️', toLabel: 'Miami',       toEmoji: '🌴' },
+  { fromLabel: 'San Francisco', fromEmoji: '🌉', toLabel: 'Buenos Aires', toEmoji: '💃' },
+  { fromLabel: 'New York',      fromEmoji: '🗽', toLabel: 'Paris',        toEmoji: '🗼' },
+  { fromLabel: 'Denver',        fromEmoji: '🏔️', toLabel: 'Seattle',     toEmoji: '☕' },
+]
+
+// City label data for globe overlay — city name + region shown at arc endpoints
+const CITY_LABELS: Record<string, { name: string; region: string }> = {
+  nyc:          { name: 'New York',      region: 'United States'  },
+  lisbon:       { name: 'Lisbon',        region: 'Portugal'       },
+  tokyo:        { name: 'Tokyo',         region: 'Japan'          },
+  sydney:       { name: 'Sydney',        region: 'Australia'      },
+  london:       { name: 'London',        region: 'United Kingdom' },
+  capeTown:     { name: 'Cape Town',     region: 'South Africa'   },
+  singapore:    { name: 'Singapore',     region: 'Southeast Asia' },
+  paris:        { name: 'Paris',         region: 'France'         },
+  dubai:        { name: 'Dubai',         region: 'UAE'            },
+  reykjavik:    { name: 'Reykjavik',     region: 'Iceland'        },
+  buenosAires:  { name: 'Buenos Aires',  region: 'Argentina'      },
+  bangkok:      { name: 'Bangkok',       region: 'Thailand'       },
+  hawaii:       { name: 'Honolulu',      region: 'Hawaii, USA'    },
+  chicago:      { name: 'Chicago',       region: 'United States'  },
+  miami:        { name: 'Miami',         region: 'United States'  },
+  sanFrancisco: { name: 'San Francisco', region: 'United States'  },
+  denver:       { name: 'Denver',        region: 'United States'  },
+  seattle:      { name: 'Seattle',       region: 'United States'  },
+}
+
+// Destination intelligence data — one entry per arc (destination = second city)
+// Row display order: TRAVEL DATES (D), TEMPERATURE (A), FLIGHT TIME (B), CROWD LEVEL (B),
+//   PHOTO SPOTS (C), GOLDEN HOUR (B), TRENDING (C), KNOWN FOR (C), EST. TRIP COST (A)
+type DestRow  = { category: string; value: string }
+type DestData = { city: string; country: string; photo: string; rows: DestRow[] }
+
+const DESTINATION_DATA: DestData[] = [
+  // 0 — nyc → lisbon
+  { city: 'Lisbon',       country: 'Portugal',
+    photo: 'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'May 10–17' },
+      { category: 'TEMPERATURE',   value: '24°C — Warm & sunny' },
+      { category: 'FLIGHT TIME',   value: '7h direct from JFK' },
+      { category: 'CROWD LEVEL',   value: 'Low — Off-peak season' },
+      { category: 'PHOTO SPOTS',   value: 'Alfama rooftops, Belém Tower' },
+      { category: 'GOLDEN HOUR',   value: '8:47 PM — Long summer evenings' },
+      { category: 'TRENDING',      value: 'Pastéis de nata food tours' },
+      { category: 'KNOWN FOR',     value: 'Fado music, tiled streets, tram 28' },
+      { category: 'EST. TRIP COST',value: '$1,200 — flights + 7 nights' },
+    ] },
+  // 1 — tokyo → sydney
+  { city: 'Sydney',       country: 'Australia',
+    photo: 'https://images.unsplash.com/photo-1524293581917-878a6d017c71?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'Apr 5–16' },
+      { category: 'TEMPERATURE',   value: '19°C — Crisp autumn days' },
+      { category: 'FLIGHT TIME',   value: '9.5h from Narita' },
+      { category: 'CROWD LEVEL',   value: 'Moderate — Shoulder season' },
+      { category: 'PHOTO SPOTS',   value: 'Opera House, Bondi to Coogee' },
+      { category: 'GOLDEN HOUR',   value: '5:12 PM — Perfect beach light' },
+      { category: 'TRENDING',      value: 'Vivid Sydney light festival' },
+      { category: 'KNOWN FOR',     value: 'Harbour Bridge, surf, wildlife' },
+      { category: 'EST. TRIP COST',value: '$2,800 — flights + 11 nights' },
+    ] },
+  // 2 — london → capeTown
+  { city: 'Cape Town',    country: 'South Africa',
+    photo: 'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'Jan 8–22' },
+      { category: 'TEMPERATURE',   value: '28°C — Peak summer' },
+      { category: 'FLIGHT TIME',   value: '11h from Heathrow' },
+      { category: 'CROWD LEVEL',   value: 'High — Holiday season' },
+      { category: 'PHOTO SPOTS',   value: 'Table Mountain, Camps Bay sunset' },
+      { category: 'GOLDEN HOUR',   value: '7:58 PM — Dramatic mountain light' },
+      { category: 'TRENDING',      value: 'Winelands day trips' },
+      { category: 'KNOWN FOR',     value: 'Safari, penguins, Cape Point' },
+      { category: 'EST. TRIP COST',value: '$2,100 — flights + 14 nights' },
+    ] },
+  // 3 — nyc → hawaii
+  { city: 'Honolulu',     country: 'Hawaii, USA',
+    photo: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'Mar 15–22' },
+      { category: 'TEMPERATURE',   value: '27°C — Tropical paradise' },
+      { category: 'FLIGHT TIME',   value: '11h from JFK' },
+      { category: 'CROWD LEVEL',   value: 'Moderate — Shoulder season' },
+      { category: 'PHOTO SPOTS',   value: 'Waikiki Beach, Diamond Head' },
+      { category: 'GOLDEN HOUR',   value: '6:45 PM — Pacific glow' },
+      { category: 'TRENDING',      value: 'North Shore surf season' },
+      { category: 'KNOWN FOR',     value: 'Volcanoes, luaus, snorkeling' },
+      { category: 'EST. TRIP COST',value: '$1,800 — flights + 7 nights' },
+    ] },
+  // 4 — dubai → reykjavik
+  { city: 'Reykjavik',    country: 'Iceland',
+    photo: 'https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'Nov 18–25' },
+      { category: 'TEMPERATURE',   value: '4°C — Bundle up' },
+      { category: 'FLIGHT TIME',   value: '7h via Helsinki' },
+      { category: 'CROWD LEVEL',   value: 'Low — Quiet season' },
+      { category: 'PHOTO SPOTS',   value: 'Hallgrímskirkja, Blue Lagoon' },
+      { category: 'GOLDEN HOUR',   value: '3:30 PM — Arctic golden glow' },
+      { category: 'TRENDING',      value: 'Northern lights tours' },
+      { category: 'KNOWN FOR',     value: 'Geysers, glaciers, hot springs' },
+      { category: 'EST. TRIP COST',value: '$2,400 — flights + 7 nights' },
+    ] },
+  // 5 — nyc → tokyo
+  { city: 'Tokyo',        country: 'Japan',
+    photo: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'Mar 28–Apr 8' },
+      { category: 'TEMPERATURE',   value: '18°C — Cherry blossom season' },
+      { category: 'FLIGHT TIME',   value: '14h non-stop from JFK' },
+      { category: 'CROWD LEVEL',   value: 'Moderate — Temples busy at dawn' },
+      { category: 'PHOTO SPOTS',   value: 'Fushimi Inari 6am, Shibuya crossing' },
+      { category: 'GOLDEN HOUR',   value: '6:12 PM — Soft spring light' },
+      { category: 'TRENDING',      value: 'Tsukiji outer market, teamLab' },
+      { category: 'KNOWN FOR',     value: '2,000+ temples, kaiseki, tech culture' },
+      { category: 'EST. TRIP COST',value: '$2,600 — flights + 11 nights' },
+    ] },
+  // 6 — chicago → miami
+  { city: 'Miami',        country: 'United States',
+    photo: 'https://images.unsplash.com/photo-1533106497176-45ae19e68ba2?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'May 5–10' },
+      { category: 'TEMPERATURE',   value: '30°C — Hot and humid' },
+      { category: 'FLIGHT TIME',   value: '3h from O\'Hare' },
+      { category: 'CROWD LEVEL',   value: 'Low — Pre-summer' },
+      { category: 'PHOTO SPOTS',   value: 'South Beach, Wynwood Walls' },
+      { category: 'GOLDEN HOUR',   value: '8:02 PM — Art Deco sunset' },
+      { category: 'TRENDING',      value: 'Little Havana food walks' },
+      { category: 'KNOWN FOR',     value: 'Nightlife, Cuban coffee, Ocean Drive' },
+      { category: 'EST. TRIP COST',value: '$900 — flights + 5 nights' },
+    ] },
+  // 7 — sanFrancisco → buenosAires
+  { city: 'Buenos Aires', country: 'Argentina',
+    photo: 'https://images.unsplash.com/photo-1589909202802-8f4aadce1849?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'Apr 1–9' },
+      { category: 'TEMPERATURE',   value: '18°C — Mild autumn' },
+      { category: 'FLIGHT TIME',   value: '13h from SFO' },
+      { category: 'CROWD LEVEL',   value: 'Low — Off-peak' },
+      { category: 'PHOTO SPOTS',   value: 'La Boca, Recoleta Cemetery' },
+      { category: 'GOLDEN HOUR',   value: '6:15 PM — Golden barrio light' },
+      { category: 'TRENDING',      value: 'Underground tango milongas' },
+      { category: 'KNOWN FOR',     value: 'Steak, Malbec, tango' },
+      { category: 'EST. TRIP COST',value: '$1,600 — flights + 8 nights' },
+    ] },
+  // 8 — nyc → paris
+  { city: 'Paris',        country: 'France',
+    photo: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'Jun 10–15' },
+      { category: 'TEMPERATURE',   value: '22°C — Perfect spring' },
+      { category: 'FLIGHT TIME',   value: '7.5h from JFK' },
+      { category: 'CROWD LEVEL',   value: 'High — Peak tourism' },
+      { category: 'PHOTO SPOTS',   value: 'Trocadéro, Montmartre, Seine at dusk' },
+      { category: 'GOLDEN HOUR',   value: '9:15 PM — Late European sunset' },
+      { category: 'TRENDING',      value: 'Hidden wine bars in Le Marais' },
+      { category: 'KNOWN FOR',     value: 'Louvre, Eiffel Tower, patisseries' },
+      { category: 'EST. TRIP COST',value: '$2,200 — flights + 5 nights' },
+    ] },
+  // 9 — denver → seattle
+  { city: 'Seattle',      country: 'United States',
+    photo: 'https://images.unsplash.com/photo-1502175353174-a7a70e73b362?w=640&q=80',
+    rows: [
+      { category: 'TRAVEL DATES',  value: 'Jul 18–22' },
+      { category: 'TEMPERATURE',   value: '21°C — Dry summer' },
+      { category: 'FLIGHT TIME',   value: '3.5h from Denver' },
+      { category: 'CROWD LEVEL',   value: 'Moderate — Festival season' },
+      { category: 'PHOTO SPOTS',   value: 'Pike Place, Kerry Park skyline' },
+      { category: 'GOLDEN HOUR',   value: '9:05 PM — Mountain sunset' },
+      { category: 'TRENDING',      value: 'Coffee crawl in Capitol Hill' },
+      { category: 'KNOWN FOR',     value: 'Tech scene, seafood, Mount Rainier' },
+      { category: 'EST. TRIP COST',value: '$650 — flights + 4 nights' },
+    ] },
+]
+
+// Category → lucide-react icon + row style type for DestinationPanel rows
+// A=Highlight, B=Detail, C=Tags, D=Dates
+type RowStyleType = 'A' | 'B' | 'C' | 'D'
+const ROW_TYPE: Record<string, RowStyleType> = {
+  'TRAVEL DATES':   'D',
+  'TEMPERATURE':    'A',
+  'FLIGHT TIME':    'B',
+  'CROWD LEVEL':    'B',
+  'PHOTO SPOTS':    'C',
+  'GOLDEN HOUR':    'B',
+  'TRENDING':       'C',
+  'KNOWN FOR':      'C',
+  'EST. TRIP COST': 'A',
+}
+const ICON_COLOR = 'rgba(245,158,11,0.6)'
+const ROW_ICONS: Record<string, React.ReactNode> = {
+  'TEMPERATURE':    <Thermometer size={14} color={ICON_COLOR} />,
+  'CROWD LEVEL':    <Users       size={14} color={ICON_COLOR} />,
+  'PHOTO SPOTS':    <Camera      size={14} color={ICON_COLOR} />,
+  'GOLDEN HOUR':    <Sun         size={14} color={ICON_COLOR} />,
+  'TRENDING':       <TrendingUp  size={14} color={ICON_COLOR} />,
+  'KNOWN FOR':      <Compass     size={14} color={ICON_COLOR} />,
+  'FLIGHT TIME':    <Clock       size={14} color={ICON_COLOR} />,
+  'EST. TRIP COST': <CreditCard  size={14} color={ICON_COLOR} />,
+  'TRAVEL DATES':   <Calendar    size={14} color={ICON_COLOR} />,
+}
+
+const CHAT_PROMPTS = [
+  "I'm based in NYC. Got May 10–17 off work. Looking for an international trip — warm weather, good food, walkable city.",
+  "Living in Tokyo right now. Free April 5–16. Want beaches and hiking — somewhere in the Southern Hemisphere.",
+  "Based in London. Two weeks off in January. Thinking safari + beach. International, budget flexible.",
+  "I'm in New York. March 15–22 is open. Domestic trip, need to fully disconnect. Beach and nature.",
+  "Currently in Dubai. Week off in November. International — want the exact opposite of desert heat.",
+  "NYC resident. Free late March through early April. International, culture-heavy. I love food and temples.",
+  "Living in Chicago. May 5–10 free. Quick domestic getaway. Warm, fun, easy flight.",
+  "Based in SF. April 1–9 off. International trip, want something completely different from tech culture. Good wine a plus.",
+  "I'm in NYC. June 10–15 open. Classic European city. International, okay to splurge a little.",
+  "Based in Denver. July 18–22, short trip. Domestic, love good coffee and outdoors.",
+]
+
+const SYSTEM_RESPONSES = [
+  { line1: "May in Europe, warm and walkable... checking flights from JFK.",       line2: "Lisbon is your answer. Here's the full picture →"    },
+  { line1: "Southern Hemisphere beaches with hiking access... let me look.",       line2: "Sydney in April is ideal. Breaking it down →"         },
+  { line1: "Safari and beach for two weeks in January... perfect timing.",         line2: "Cape Town has both. Here's everything →"              },
+  { line1: "Domestic beach escape from NYC in March... nice.",                     line2: "Hawaii is the move. Check this out →"                 },
+  { line1: "Opposite of desert heat in November... I know exactly where.",         line2: "Iceland. No question. Here's why →"                   },
+  { line1: "Culture and food in late March from NYC... one clear answer.",         line2: "Tokyo during cherry blossoms. Look →"                 },
+  { line1: "Quick warm getaway from Chicago... easy one.",                         line2: "Miami in May. Short flight, big vibes →"              },
+  { line1: "Something different from SF with good wine... love this.",             line2: "Buenos Aires. Tango and Malbec await →"               },
+  { line1: "Classic European splurge from NYC in June... say less.",               line2: "Paris. Always Paris. Here's the plan →"               },
+  { line1: "Short domestic trip, coffee and outdoors... got it.",                  line2: "Seattle in July is chef's kiss →"                     },
 ]
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -89,87 +307,193 @@ function buildArcPoints(a: THREE.Vector3, b: THREE.Vector3, segs = 80, lift = 0.
   })
 }
 
-// ── City photo data ──────────────────────────────────────────────────────────
-const PHOTO_CITY_DATA = [
-  { key: 'nyc',      label: 'New York',  src: 'https://images.unsplash.com/photo-1485738422979-f5c462d49f04?w=200&q=80' },
-  { key: 'london',   label: 'London',    src: 'https://images.unsplash.com/photo-1529655683826-aba9b3e77383?w=200&q=80' },
-  { key: 'tokyo',    label: 'Tokyo',     src: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=200&q=80' },
-  { key: 'lisbon',   label: 'Lisbon',    src: 'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=200&q=80' },
-  { key: 'sydney',   label: 'Sydney',    src: 'https://images.unsplash.com/photo-1524293581917-878a6d017c71?w=200&q=80' },
-  { key: 'capeTown', label: 'Cape Town', src: 'https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=200&q=80' },
-] as const
+// ── Typing indicator — three pulsing dots ─────────────────────────────────────
+function TypingDots() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '2px 0' }}>
+      {[0, 1, 2].map(d => (
+        <motion.span
+          key={d}
+          style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.5)', display: 'inline-block', flexShrink: 0 }}
+          animate={{ opacity: [0.2, 0.8, 0.2] }}
+          transition={{ duration: 0.9, repeat: Infinity, delay: d * 0.15, ease: 'easeInOut' }}
+        />
+      ))}
+    </div>
+  )
+}
 
-// ── Typewriter ───────────────────────────────────────────────────────────────
-function TypewriterText({ active }: { active: boolean }) {
-  const [destIdx,   setDestIdx]   = useState(0)
-  const [displayed, setDisplayed] = useState('')
-  const [phase,     setPhase]     = useState<'idle' | 'typing' | 'holding' | 'erasing'>('idle')
+// ── Chat bubbles — two-bubble chat interface above the destination card ────────
+function ChatInputBubble({ arcIdx }: { arcIdx: number }) {
+  const query    = CHAT_PROMPTS[arcIdx]
+  const response = SYSTEM_RESPONSES[arcIdx]
 
+  const [displayed,           setDisplayed]           = useState('')
+  const [typingDone,          setTypingDone]          = useState(false)
+  const [systemBubbleShown,   setSystemBubbleShown]   = useState(false)
+  const [line1Shown,          setLine1Shown]          = useState(false)
+  const [line2IndicatorShown, setLine2IndicatorShown] = useState(false)
+  const [line2Shown,          setLine2Shown]          = useState(false)
+
+  // Type character by character at 35ms/char
   useEffect(() => {
-    if (active && phase === 'idle') setPhase('typing')
-  }, [active, phase])
-
-  useEffect(() => {
-    if (phase === 'idle') return
-    const full = DESTINATIONS[destIdx]
-    if (phase === 'typing') {
-      if (displayed.length < full.length) {
-        const id = setTimeout(() => setDisplayed(full.slice(0, displayed.length + 1)), 40)
-        return () => clearTimeout(id)
-      }
-      const id = setTimeout(() => setPhase('holding'), 1000)
+    if (typingDone) return
+    if (displayed.length < query.length) {
+      const id = setTimeout(() => setDisplayed(query.slice(0, displayed.length + 1)), 35)
       return () => clearTimeout(id)
     }
-    if (phase === 'holding') {
-      const id = setTimeout(() => setPhase('erasing'), 1000)
-      return () => clearTimeout(id)
-    }
-    if (phase === 'erasing') {
-      if (displayed.length > 0) {
-        const id = setTimeout(() => setDisplayed(d => d.slice(0, -1)), 22)
-        return () => clearTimeout(id)
-      }
-      setDestIdx(i => (i + 1) % DESTINATIONS.length)
-      setPhase('typing')
-    }
-  }, [phase, displayed, destIdx])
+    setTypingDone(true)
+  }, [displayed, typingDone, query])
+
+  // System bubble slides in 300ms after typing finishes — shows first typing indicator
+  useEffect(() => {
+    if (!typingDone) return
+    const id = setTimeout(() => setSystemBubbleShown(true), 300)
+    return () => clearTimeout(id)
+  }, [typingDone])
+
+  // Line 1 text appears 800ms after system bubble (replaces dots)
+  useEffect(() => {
+    if (!systemBubbleShown) return
+    const id = setTimeout(() => setLine1Shown(true), 800)
+    return () => clearTimeout(id)
+  }, [systemBubbleShown])
+
+  // Second typing indicator appears 1s after line 1
+  useEffect(() => {
+    if (!line1Shown) return
+    const id = setTimeout(() => setLine2IndicatorShown(true), 1000)
+    return () => clearTimeout(id)
+  }, [line1Shown])
+
+  // Line 2 text appears 800ms after second indicator
+  useEffect(() => {
+    if (!line2IndicatorShown) return
+    const id = setTimeout(() => setLine2Shown(true), 800)
+    return () => clearTimeout(id)
+  }, [line2IndicatorShown])
 
   return (
-    <span style={{ fontFamily: 'var(--font-sora)', color: 'rgba(255,255,255,0.65)', fontSize: '20px', fontWeight: 300 }}>
-      {displayed}
-      {phase !== 'idle' && (
-        <motion.span
-          className="ml-[3px] inline-block h-[17px] w-[2px] align-middle"
-          style={{ backgroundColor: '#f59e0b' }}
-          animate={{ opacity: [1, 0] }}
-          transition={{ duration: 0.55, repeat: Infinity, repeatType: 'reverse', ease: 'linear' }}
-        />
-      )}
-    </span>
+    <div style={{ width: '380px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+      {/* ── User bubble (left-aligned, amber tint) ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+        <span style={{
+          fontSize: '10px', color: 'rgba(255,255,255,0.28)',
+          fontFamily: 'var(--font-sora)', marginBottom: '4px', letterSpacing: '0.04em',
+        }}>You</span>
+        <div style={{
+          maxWidth: '85%',
+          backgroundColor: 'rgba(245,158,11,0.12)',
+          border: '1px solid rgba(245,158,11,0.2)',
+          borderRadius: '16px 16px 16px 4px',
+          padding: '12px 16px',
+          fontSize: '14px', color: '#ffffff',
+          fontFamily: 'var(--font-sora)', lineHeight: 1.55,
+        }}>
+          {displayed}
+          {!typingDone && (
+            <motion.span
+              className="ml-[2px] inline-block h-[13px] w-[2px] align-middle"
+              style={{ backgroundColor: '#f59e0b' }}
+              animate={{ opacity: [1, 0] }}
+              transition={{ duration: 0.5, repeat: Infinity, repeatType: 'reverse', ease: 'linear' }}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ── System bubble (slides in after typing, shows two lines sequentially) ── */}
+      <AnimatePresence>
+        {systemBubbleShown && (
+          <motion.div
+            initial={{ opacity: 0, x: -14 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}
+          >
+            {/* Roam label */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+              <Compass size={12} color="rgba(245,158,11,0.65)" />
+              <span style={{
+                fontSize: '10px', color: 'rgba(245,158,11,0.65)',
+                fontFamily: 'var(--font-sora)', fontWeight: 500, letterSpacing: '0.04em',
+              }}>Roam</span>
+            </div>
+
+            <div style={{
+              maxWidth: '85%',
+              backgroundColor: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: '4px 16px 16px 16px',
+              padding: '12px 16px',
+              display: 'flex', flexDirection: 'column', gap: '8px',
+            }}>
+              {/* Slot 1: typing dots → line 1 */}
+              <AnimatePresence mode="wait">
+                {!line1Shown ? (
+                  <motion.div key="dots1" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    <TypingDots />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="line1"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-sora)', lineHeight: 1.5 }}
+                  >
+                    {response.line1}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Slot 2: typing dots → line 2 (only after line 1 is visible) */}
+              <AnimatePresence mode="wait">
+                {line2IndicatorShown && !line2Shown && (
+                  <motion.div key="dots2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                    <TypingDots />
+                  </motion.div>
+                )}
+                {line2Shown && (
+                  <motion.div
+                    key="line2"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    style={{ fontSize: '13px', fontWeight: 500, color: 'rgba(245,158,11,0.85)', fontFamily: 'var(--font-sora)', lineHeight: 1.5 }}
+                  >
+                    {response.line2}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
 // ── Globe + HTML overlay (merged for direct DOM access) ──────────────────────
-function GlobeSection({ onReady }: { onReady?: () => void }) {
+function GlobeSection({ onReady, onArcChange, onPhaseChange, onCardVisible }: {
+  onReady?: () => void
+  onArcChange?: (idx: number) => void
+  onPhaseChange?: (phase: ArcPhase) => void
+  onCardVisible?: () => void
+}) {
   const canvasRef    = useRef<HTMLCanvasElement>(null)
   const fromLabelRef = useRef<HTMLDivElement>(null)
   const toLabelRef   = useRef<HTMLDivElement>(null)
-  const card0Ref     = useRef<HTMLDivElement>(null)
-  const card1Ref     = useRef<HTMLDivElement>(null)
-  const card2Ref     = useRef<HTMLDivElement>(null)
-  const card3Ref     = useRef<HTMLDivElement>(null)
-  // Photo circle refs — outer (positioning) and inner (sizing) per city
-  const photoOuterRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const photoInnerRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const airplaneRef  = useRef<HTMLDivElement>(null)
+  const onArcChangeRef    = useRef(onArcChange)
+  const onPhaseChangeRef2 = useRef(onPhaseChange)
+  const onCardVisibleRef  = useRef(onCardVisible)
+  onArcChangeRef.current    = onArcChange
+  onPhaseChangeRef2.current = onPhaseChange
+  onCardVisibleRef.current  = onCardVisible
   const [arcIdx, setArcIdx] = useState(0)
-
-  // Preload all city photos so they're cached before arcs start
-  useEffect(() => {
-    for (const { src } of PHOTO_CITY_DATA) {
-      const img = new window.Image()
-      img.src = src
-    }
-  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -178,19 +502,11 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
     const W    = window.innerWidth
     const H    = window.innerHeight
     const SEGS = 80
-    // Arc t-values for the 4 info cards: 20%, 40%, 60%, 75%
-    const CARD_OFFS = [0.20, 0.40, 0.60, 0.75].map(t => Math.floor(t * SEGS) * 3)
 
     // DOM element handles (stable after first render)
     const fromEl     = fromLabelRef.current
     const toEl       = toLabelRef.current
-    const cardEls    = [card0Ref.current, card1Ref.current, card2Ref.current, card3Ref.current]
-    const photoOuters = photoOuterRefs.current
-    const photoInners = photoInnerRefs.current
-
-    const isMobile    = W < 768
-    const SZ_INACTIVE = isMobile ? '40px' : '52px'
-    const SZ_ACTIVE   = isMobile ? '52px' : '68px'
+    const airplaneEl = airplaneRef.current
 
     // ── Scene / Camera / Renderer ──────────────────────────────────────────
     const scene    = new THREE.Scene()
@@ -204,8 +520,8 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
 
     // ── Globe group ────────────────────────────────────────────────────────
     const globe = new THREE.Group()
-    globe.position.set(0.55, 0, 0)
-    globe.scale.setScalar(0.87)   // ~13% smaller
+    globe.position.set(0.05, 0, 0)
+    globe.scale.setScalar(0.82)
     scene.add(globe)
 
     const loader = new THREE.TextureLoader()
@@ -253,20 +569,30 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
     fill.position.set(-3, -1, -2)
     scene.add(fill)
 
-    // ── City positions & dots ──────────────────────────────────────────────
+    // ── City positions & layered dots ─────────────────────────────────────
     const cityVec: Record<string, THREE.Vector3> = {}
     for (const [name, [lat, lng]] of Object.entries(CITY_COORDS)) {
       cityVec[name] = latLngToVec3(lat, lng, 1.012)
     }
-    const photoCityKeys = new Set<string>(PHOTO_CITY_DATA.map(d => d.key))
-    for (const city of new Set(ARC_PAIRS.flat())) {
+
+    // Per-city point lights for glow effect
+    const cityLights: Record<string, THREE.PointLight> = {}
+
+    for (const city of new Set<string>(ARC_PAIRS.flat())) {
       const p = cityVec[city]; if (!p) continue
-      // Photo cities get an HTML circle overlay instead of a 3D dot
-      if (photoCityKeys.has(city)) continue
-      const core = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), new THREE.MeshBasicMaterial({ color: 0xf59e0b }))
-      core.position.copy(p); globe.add(core)
-      const halo = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 8), new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.18 }))
-      halo.position.copy(p); globe.add(halo)
+
+      // Small amber dot
+      const dot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.01, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xf59e0b }),
+      )
+      dot.position.copy(p); globe.add(dot)
+
+      // Point light for glow
+      const light = new THREE.PointLight(0xf59e0b, 0.3, 0.15)
+      light.position.copy(p); globe.add(light)
+
+      cityLights[city] = light
     }
 
     // ── Arc geometry (reusable single buffer) ──────────────────────────────
@@ -288,13 +614,6 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
     const matLine = new THREE.LineBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0 })
     globe.add(new THREE.Line(arcGeom, matGlow))
     globe.add(new THREE.Line(arcGeom, matLine))
-
-    const leadArr  = new Float32Array(3)
-    const leadAttr = new THREE.BufferAttribute(leadArr, 3)
-    const leadGeom = new THREE.BufferGeometry()
-    leadGeom.setAttribute('position', leadAttr)
-    const matLead = new THREE.PointsMaterial({ color: 0xffffff, size: 0.038, transparent: true, opacity: 0, sizeAttenuation: true })
-    globe.add(new THREE.Points(leadGeom, matLead))
 
     // ── Projection helpers ─────────────────────────────────────────────────
     // Pre-allocated to avoid per-frame allocations
@@ -325,38 +644,66 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
       if (!el) return
       el.style.opacity = op.toFixed(3)
     }
-    // Apply position + opacity + scale + float offset to a card element
-    function setCardTransform(el: HTMLDivElement | null, x: number, y: number, op: number, scale: number, dy: number) {
-      if (!el) return
-      el.style.opacity = op.toFixed(3)
-      el.style.transform = `translate(${x.toFixed(1)}px, ${(y + dy).toFixed(1)}px) translate(-50%, calc(-100% - 8px)) scale(${scale.toFixed(3)})`
-    }
-
     function hideAll() {
       setOp(fromEl, 0); setOp(toEl, 0)
-      cardEls.forEach(el => setOp(el, 0))
+      if (airplaneEl) airplaneEl.style.opacity = '0'
     }
 
     // ── Arc state machine ──────────────────────────────────────────────────
     let curArcIdx = 0
-    let phase: 'idle' | 'drawing' | 'holding' | 'fading' | 'pause' = 'idle'
+    let phase: ArcPhase = 'idle'
+    let lastPhase: ArcPhase = 'idle'
     let tPhase = 0
 
     const INIT_DELAY = 0.5
     const DRAW_DUR   = 4.0
-    const HOLD_DUR   = 2.5
+    const HOLD_DUR   = 6.0
     const FADE_DUR   = 1.0
     const PAUSE_DUR  = 0.8
 
-    // Track when each card became visible (absolute elapsed time), null = not yet shown
-    let cardAppearTimes: (number | null)[] = [null, null, null, null]
+    // ── Globe rotation — three modes: free / easing / slow ──────────────
+    const ROT_NORMAL  = Math.PI * 2 / 75   // one full rotation per 75 s (between arcs)
+    const ROT_SLOW    = Math.PI * 2 / 180  // one full rotation per 180 s (~40%, during arc)
+    const EASING_DUR  = 1.5                // seconds for eased turn toward arc midpoint
+    type RotMode = 'free' | 'easing' | 'slow'
+    let rotMode: RotMode = 'free'
+    let rotY         = 0
+    let prevT        = 0
+    let easingStartY = 0
+    let easingTargetY= 0
+    let easingStartT = 0
+
+    function startEaseToArc(idx: number, t: number) {
+      const [a, b] = ARC_PAIRS[idx]
+      const va = cityVec[a], vb = cityVec[b]
+      if (!va || !vb) return
+      const mid    = va.clone().add(vb).normalize()
+      const target = Math.atan2(-mid.x, mid.z)
+      // Shortest-path rotation direction from current rotY
+      const norm = ((rotY % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
+      let   diff = (target - norm) % (Math.PI * 2)
+      if (diff >  Math.PI) diff -= Math.PI * 2
+      if (diff < -Math.PI) diff += Math.PI * 2
+      easingStartY  = rotY
+      easingTargetY = rotY + diff
+      easingStartT  = t
+      rotMode = 'easing'
+    }
+
+    // Duration of the chatting phase:
+    //   typing (35ms/char) + 0.3s bubble delay + 0.8s dots1 + 1.0s gap + 0.8s dots2 + 0.5s buffer
+    function chatDur(idx: number): number {
+      return CHAT_PROMPTS[idx].length * 0.035 + 3.4
+    }
+
+    let cardTriggered = false
 
     function loadArc(idx: number) {
       arcGeom.setDrawRange(0, 0)
       arcPosArr.set(arcBufs[idx])
       arcAttr.needsUpdate = true
       arcGeom.computeBoundingSphere()
-      cardAppearTimes = [null, null, null, null]
+      cardTriggered = false
       hideAll()
     }
 
@@ -367,123 +714,126 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
     function tick() {
       raf = requestAnimationFrame(tick)
       const t = clock.getElapsedTime()
-
-      globe.rotation.y = t * (Math.PI * 2 / 60)
-      // Clouds rotate ~25% faster than the earth (differential on top of globe rotation)
-      cloudMesh.rotation.y = t * (Math.PI * 2 / 60) * 0.25
+      const delta = Math.min(t - prevT, 0.05)
+      prevT = t
 
       // ── Phase state machine ────────────────────────────────────────────
       if (phase === 'idle') {
         if (t >= INIT_DELAY) {
-          phase = 'drawing'; tPhase = t
-          loadArc(0); setArcIdx(0)
+          phase = 'chatting'; tPhase = t
+          loadArc(0)
+          setArcIdx(0); onArcChangeRef.current?.(0)
         }
       } else {
         const dt = t - tPhase
 
-        if (phase === 'drawing') {
+        if (phase === 'chatting') {
+          if (dt >= chatDur(curArcIdx)) {
+            startEaseToArc(curArcIdx, t)
+            phase = 'drawing'; tPhase = t
+          }
+
+        } else if (phase === 'drawing') {
           const p   = Math.min(dt / DRAW_DUR, 1)
           const cnt = Math.floor(p * (SEGS + 1))
           arcGeom.setDrawRange(0, cnt)
           const op = Math.min(p * 4, 1)
-          matLine.opacity = op; matGlow.opacity = op * 0.22; matLead.opacity = op * 0.95
-          if (cnt > 0) {
-            const off = (cnt - 1) * 3
-            leadArr[0] = arcPosArr[off]; leadArr[1] = arcPosArr[off + 1]; leadArr[2] = arcPosArr[off + 2]
-            leadAttr.needsUpdate = true
+          matLine.opacity = op; matGlow.opacity = op * 0.15
+
+          // Fire card-visible callback once arc reaches 30% drawn
+          if (p >= 0.3 && !cardTriggered) {
+            cardTriggered = true
+            onCardVisibleRef.current?.()
           }
-          // Record the first time each card's threshold vertex is passed
-          for (let ci = 0; ci < 4; ci++) {
-            if (cardAppearTimes[ci] === null && cnt * 3 > CARD_OFFS[ci]) {
-              cardAppearTimes[ci] = t
+
+          // ── Airplane HTML overlay ──────────────────────────────────────
+          if (airplaneEl && cnt > 0) {
+            const leadIdx = cnt - 1
+            const lx = arcPosArr[leadIdx * 3], ly = arcPosArr[leadIdx * 3 + 1], lz = arcPosArr[leadIdx * 3 + 2]
+            const sp = project(lx, ly, lz)
+            let angle = 0
+            if (leadIdx > 0) {
+              const px = arcPosArr[(leadIdx - 1) * 3], py = arcPosArr[(leadIdx - 1) * 3 + 1], pz = arcPosArr[(leadIdx - 1) * 3 + 2]
+              const pp = project(px, py, pz)
+              angle = Math.atan2(sp.y - pp.y, sp.x - pp.x) * (180 / Math.PI)
+            }
+            if (sp.vis) {
+              airplaneEl.style.opacity = op.toFixed(3)
+              airplaneEl.style.transform = `translate(${sp.x.toFixed(1)}px,${sp.y.toFixed(1)}px) translate(-50%,-50%) rotate(${(angle + 45).toFixed(1)}deg)`
+            } else {
+              airplaneEl.style.opacity = '0'
             }
           }
-          if (p >= 1) { matLead.opacity = 0; phase = 'holding'; tPhase = t }
+
+          if (p >= 1) { if (airplaneEl) airplaneEl.style.opacity = '0'; phase = 'holding'; tPhase = t }
 
         } else if (phase === 'holding') {
           if (dt >= HOLD_DUR) { phase = 'fading'; tPhase = t }
 
         } else if (phase === 'fading') {
           const p = Math.min(dt / FADE_DUR, 1)
-          matLine.opacity = 1 - p; matGlow.opacity = (1 - p) * 0.22
-          if (p >= 1) { phase = 'pause'; tPhase = t; hideAll() }
+          matLine.opacity = 1 - p; matGlow.opacity = (1 - p) * 0.15
+          if (p >= 1) { phase = 'pause'; tPhase = t; hideAll(); rotMode = 'free' }
 
         } else if (phase === 'pause') {
           if (dt >= PAUSE_DUR) {
             curArcIdx = (curArcIdx + 1) % ARC_PAIRS.length
             loadArc(curArcIdx)
-            setArcIdx(curArcIdx)
-            phase = 'drawing'; tPhase = t
+            setArcIdx(curArcIdx); onArcChangeRef.current?.(curArcIdx)
+            phase = 'chatting'; tPhase = t
           }
         }
       }
 
-      // ── Overlay DOM updates (per-frame, zero allocations) ──────────────
-      // updateCamLocal needed every frame — photo circles are always visible
-      updateCamLocal()
-      const arcPhase = phase === 'drawing' || phase === 'holding' || phase === 'fading'
-      const [arcFrom, arcTo] = ARC_PAIRS[curArcIdx]
-
-      // ── Photo circles — position + active state every frame ────────────
-      for (const { key } of PHOTO_CITY_DATA) {
-        const outerEl = photoOuters[key]; if (!outerEl) continue
-        const pos = cityVec[key];         if (!pos)    continue
-        const sp  = project(pos.x, pos.y, pos.z)
-        outerEl.style.transform = `translate(${sp.x.toFixed(1)}px, ${sp.y.toFixed(1)}px) translate(-50%, -50%)`
-        if (!sp.vis) { outerEl.style.opacity = '0'; continue }
-        const active = arcPhase && (key === arcFrom || key === arcTo)
-        outerEl.style.opacity = active ? '1' : '0.5'
-        const innerEl = photoInners[key]
-        if (innerEl) {
-          innerEl.style.width     = active ? SZ_ACTIVE   : SZ_INACTIVE
-          innerEl.style.height    = active ? SZ_ACTIVE   : SZ_INACTIVE
-          innerEl.style.border    = active
-            ? '2.5px solid rgba(245,158,11,0.9)'
-            : '2px solid rgba(245,158,11,0.3)'
-          innerEl.style.boxShadow = active
-            ? '0 0 20px rgba(245,158,11,0.3), 0 0 40px rgba(245,158,11,0.1), 0 2px 8px rgba(0,0,0,0.5)'
-            : '0 2px 8px rgba(0,0,0,0.5)'
-        }
+      // Fire phase-change callback when phase transitions
+      if (phase !== lastPhase) {
+        lastPhase = phase
+        onPhaseChangeRef2.current?.(phase)
       }
 
-      if (arcPhase) {
-        const dt = t - tPhase
-        const [fromKey, toKey] = [arcFrom, arcTo]
+      // ── Globe rotation ────────────────────────────────────────────────
+      if (rotMode === 'easing') {
+        const ep   = Math.min((t - easingStartT) / EASING_DUR, 1)
+        const ease = ep < 0.5 ? 2 * ep * ep : 1 - Math.pow(-2 * ep + 2, 2) / 2
+        rotY = easingStartY + (easingTargetY - easingStartY) * ease
+        if (ep >= 1) { rotY = easingTargetY; rotMode = 'slow' }
+      } else {
+        rotY += delta * (rotMode === 'slow' ? ROT_SLOW : ROT_NORMAL)
+      }
+      globe.rotation.y = rotY
+      cloudMesh.rotation.y = t * ROT_NORMAL * 0.25   // cloud drift on absolute time
 
-        // Label opacity follows arc line opacity
+      // ── Overlay DOM updates (labels + ring pulse) ─────────────────────
+      updateCamLocal()
+      const labelsActive = phase === 'drawing' || phase === 'holding' || phase === 'fading'
+      const [arcFrom, arcTo] = ARC_PAIRS[curArcIdx]
+
+      // ── City light intensity ─────────────────────────────────────────────
+      const lightActive = phase === 'drawing' || phase === 'holding'
+      for (const [city, light] of Object.entries(cityLights)) {
+        const isEndpoint = lightActive && (city === arcFrom || city === arcTo)
+        light.intensity = isEndpoint ? 0.8 : 0.3
+        light.distance  = isEndpoint ? 0.25 : 0.15
+      }
+
+      if (labelsActive) {
+        const dt = t - tPhase
         const labelOp = phase === 'fading'
           ? Math.max(1 - Math.min(dt / FADE_DUR, 1), 0)
           : matLine.opacity
 
-        // City labels — position + opacity
-        const fv = cityVec[fromKey]
+        const fv = cityVec[arcFrom]
         if (fv) {
           const sp = project(fv.x, fv.y, fv.z)
           setPos(fromEl, sp.x, sp.y, 'calc(-100% - 10px)')
           setOp(fromEl, sp.vis ? labelOp : 0)
         }
-        const tv = cityVec[toKey]
+        const tv = cityVec[arcTo]
         if (tv) {
           const sp = project(tv.x, tv.y, tv.z)
           setPos(toEl, sp.x, sp.y, 'calc(-100% - 10px)')
           setOp(toEl, sp.vis ? labelOp : 0)
         }
-
-        // Info cards — progressive appearance during draw, float + fade
-        const ENTRY_DUR = 0.35
-        const fadeFp = phase === 'fading' ? Math.min(dt / FADE_DUR, 1) : 0
-        CARD_OFFS.forEach((off, ci) => {
-          const el = cardEls[ci]; if (!el) return
-          const sp = project(arcPosArr[off], arcPosArr[off + 1], arcPosArr[off + 2])
-          const appearT = cardAppearTimes[ci]
-          if (!sp.vis || appearT === null) { setOp(el, 0); return }
-          const sinceAppear = t - appearT
-          const entryP = Math.min(sinceAppear / ENTRY_DUR, 1)
-          const op = entryP * (1 - fadeFp)
-          const scale = 0.85 + 0.15 * entryP
-          const dy = entryP >= 1 ? Math.sin(t * 2) * 3 * (1 - fadeFp) : 0
-          setCardTransform(el, sp.x, sp.y, op, scale, dy)
-        })
       }
 
       renderer.render(scene, camera)
@@ -511,106 +861,202 @@ function GlobeSection({ onReady }: { onReady?: () => void }) {
     }
   }, [onReady])
 
-  const ri = ROUTE_INFO[arcIdx]
+  const [fromKey, toKey] = ARC_PAIRS[arcIdx]
+  const fromInfo = CITY_LABELS[fromKey]
+  const toInfo   = CITY_LABELS[toKey]
 
-  // Shared overlay base styles
+  // Base style for floating label container — no background/border, positioned by JS each frame
   const labelBase: React.CSSProperties = {
     position: 'absolute', left: 0, top: 0,
     opacity: 0, pointerEvents: 'none', willChange: 'transform, opacity',
-    display: 'inline-flex', alignItems: 'center', gap: '5px',
-    backgroundColor: 'rgba(8,8,8,0.82)',
-    backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-    border: '1px solid rgba(245,158,11,0.4)',
-    borderRadius: '9999px',
-    padding: '4px 10px 4px 7px',
-    fontSize: '12px', fontWeight: 600,
-    color: 'rgba(255,255,255,0.92)', fontFamily: 'var(--font-sora)',
+    display: 'inline-flex', alignItems: 'stretch', gap: '8px',
     whiteSpace: 'nowrap',
   }
-  const cardBase: React.CSSProperties = {
-    position: 'absolute', left: 0, top: 0,
-    opacity: 0, pointerEvents: 'none', willChange: 'transform, opacity',
-    width: '170px',
-    backgroundColor: 'rgba(8,8,8,0.88)',
-    backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-    borderLeft: '2px solid rgba(245,158,11,0.85)',
-    borderRight: '1px solid rgba(245,158,11,0.12)',
-    borderTop: '1px solid rgba(245,158,11,0.12)',
-    borderBottom: '1px solid rgba(245,158,11,0.12)',
-    borderRadius: '4px 8px 8px 4px',
-    padding: '8px 12px',
-    display: 'flex', flexDirection: 'column', gap: '3px',
-    fontFamily: 'var(--font-sora)',
-  }
+  const cityLabelContent = (info: { name: string; region: string } | undefined) => !info ? null : (
+    <>
+      {/* Amber vertical accent bar */}
+      <div style={{ width: '2px', backgroundColor: '#f59e0b', borderRadius: '1px', minHeight: '30px', flexShrink: 0 }} />
+      <div>
+        <div style={{ fontSize: '16px', fontWeight: 700, color: '#ffffff', fontFamily: 'var(--font-sora)', letterSpacing: '0.02em', lineHeight: 1.25, textShadow: '0 2px 12px rgba(0,0,0,0.85)' }}>
+          {info.name}
+        </div>
+        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.38)', fontFamily: 'var(--font-sora)', marginTop: '1px', textShadow: '0 2px 8px rgba(0,0,0,0.8)' }}>
+          {info.region}
+        </div>
+      </div>
+    </>
+  )
 
   return (
     <div className="absolute inset-0" style={{ pointerEvents: 'none' }}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" style={{ pointerEvents: 'none' }} />
 
-      {/* ── City photo circles ── */}
-      {PHOTO_CITY_DATA.map(({ key, label, src }) => (
-        <div
-          key={key}
-          ref={el => { photoOuterRefs.current[key] = el }}
-          style={{
-            position: 'absolute', left: 0, top: 0,
-            opacity: 0, pointerEvents: 'none',
-            willChange: 'transform, opacity',
-            transition: 'opacity 0.2s ease',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-          }}
-        >
-          {/* Photo circle */}
-          <div
-            ref={el => { photoInnerRefs.current[key] = el }}
+      {/* City endpoint labels — floating clean text with amber accent */}
+      <div ref={fromLabelRef} style={labelBase}>{cityLabelContent(fromInfo)}</div>
+      <div ref={toLabelRef}   style={labelBase}>{cityLabelContent(toInfo)}</div>
+
+      {/* Airplane icon — position updated each frame via JS transform */}
+      <div
+        ref={airplaneRef}
+        style={{
+          position: 'absolute', left: 0, top: 0,
+          opacity: 0, pointerEvents: 'none', willChange: 'transform, opacity',
+          filter: 'drop-shadow(0 0 5px rgba(245,158,11,0.85))',
+        }}
+      >
+        <Plane size={18} color="#f59e0b" />
+      </div>
+    </div>
+  )
+}
+
+// ── Destination intelligence panel ───────────────────────────────────────────
+function DestinationPanel({ arcIdx, arcPhase, cardVisible }: {
+  arcIdx: number; arcPhase: ArcPhase; cardVisible: boolean
+}) {
+  const dest = DESTINATION_DATA[arcIdx]
+  // Chat bubble: visible from chatting through holding; hides on fading
+  const chatVisible = arcPhase === 'chatting' || arcPhase === 'drawing' || arcPhase === 'holding'
+  // Card: only once arc is 30% drawn (cardVisible flag) and still drawing/holding
+  const showCard = cardVisible && (arcPhase === 'drawing' || arcPhase === 'holding')
+
+  return (
+    <div
+      className="absolute top-0 bottom-0 hidden lg:flex items-center"
+      style={{ right: '5%', pointerEvents: 'none' }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '380px' }}>
+
+        {/* Chat input bubble — independent AnimatePresence, appears first during chatting */}
+        <AnimatePresence mode="wait">
+          {chatVisible && (
+            <motion.div
+              key={`chat-${arcIdx}`}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <ChatInputBubble arcIdx={arcIdx} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Destination card — appears only when arc reaches 30% drawn */}
+        <AnimatePresence mode="wait">
+          {showCard && (
+            <motion.div
+              key={`card-${arcIdx}`}
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            >
+            <div
             style={{
-              width: '52px', height: '52px', flexShrink: 0,
-              borderRadius: '50%', overflow: 'hidden', position: 'relative',
-              border: '2px solid rgba(245,158,11,0.3)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
-              backgroundColor: 'rgba(30,30,30,0.9)',
-              transition: 'width 0.4s ease, height 0.4s ease, border 0.4s ease, box-shadow 0.4s ease',
+              width: '380px',
+              backgroundColor: 'rgba(10,10,10,0.82)',
+              backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderLeft: '2px solid rgba(245,158,11,0.55)',
+              borderRadius: '16px',
+              overflow: 'hidden',
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={src}
-              alt={label}
-              style={{
-                display: 'block',
-                width: '100%', height: '100%',
-                objectFit: 'cover', objectPosition: 'center',
-              }}
-            />
-            {/* Depth vignette */}
-            <div style={{
-              position: 'absolute', inset: 0, zIndex: 1, borderRadius: '50%',
-              background: 'radial-gradient(circle, transparent 38%, rgba(0,0,0,0.22) 100%)',
-              pointerEvents: 'none',
-            }} />
-          </div>
-        </div>
-      ))}
+            {/* Hero image — always visible when card enters */}
+            <div style={{ position: 'relative', width: '100%', height: '200px', overflow: 'hidden' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={dest.photo}
+                alt={dest.city}
+                style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
+              />
+              <div style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0, height: '85px',
+                background: 'linear-gradient(to bottom, transparent, rgba(10,10,10,0.97))',
+                pointerEvents: 'none',
+              }} />
+              <div style={{ position: 'absolute', bottom: '12px', left: '18px', right: '18px' }}>
+                <div style={{ fontSize: '28px', fontWeight: 700, color: '#fff', fontFamily: 'var(--font-sora)', lineHeight: 1.1 }}>
+                  {dest.city}
+                </div>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--font-sora)', marginTop: '3px' }}>
+                  {dest.country}
+                </div>
+              </div>
+            </div>
 
-      {/* City labels */}
-      <div ref={fromLabelRef} style={labelBase}>
-        <span>{ri.fromEmoji}</span><span>{ri.fromLabel}</span>
-      </div>
-      <div ref={toLabelRef} style={labelBase}>
-        <span>{ri.toEmoji}</span><span>{ri.toLabel}</span>
-      </div>
+            {/* Data rows — staggered reveal, type-based styling */}
+            <div style={{ padding: '10px 18px 16px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              {dest.rows.map((row, i) => {
+                const type = ROW_TYPE[row.category] ?? 'B'
+                const labelEl = (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '3px' }}>
+                    {ROW_ICONS[row.category]}
+                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.32)', textTransform: 'uppercase', letterSpacing: '0.07em', fontFamily: 'var(--font-sora)' }}>
+                      {row.category}
+                    </span>
+                  </div>
+                )
+                let inner: React.ReactNode
+                if (type === 'D') {
+                  inner = (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'rgba(245,158,11,0.08)', borderRadius: '8px', padding: '10px 14px' }}>
+                      <Calendar size={14} color={ICON_COLOR} style={{ flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.32)', fontFamily: 'var(--font-sora)', marginBottom: '2px' }}>Best time to visit</div>
+                        <div style={{ fontSize: '15px', fontWeight: 600, color: '#fff', fontFamily: 'var(--font-sora)' }}>{row.value}</div>
+                      </div>
+                    </div>
+                  )
+                } else if (type === 'A') {
+                  inner = (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '8px', padding: '10px 14px' }}>
+                      {ROW_ICONS[row.category]}
+                      <div style={{ fontSize: '16px', fontWeight: 600, color: 'rgba(255,255,255,0.92)', fontFamily: 'var(--font-sora)' }}>{row.value}</div>
+                    </div>
+                  )
+                } else if (type === 'B') {
+                  inner = (
+                    <div style={{ borderLeft: '2px solid rgba(245,158,11,0.15)', paddingLeft: '12px' }}>
+                      {labelEl}
+                      <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.85)', fontFamily: 'var(--font-sora)' }}>{row.value}</div>
+                    </div>
+                  )
+                } else {
+                  // type C — pill tags
+                  inner = (
+                    <div>
+                      {labelEl}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {row.value.split(',').map((tag, j) => (
+                          <span key={j} style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: '9999px', padding: '3px 10px', fontSize: '12px', color: 'rgba(255,255,255,0.78)', fontFamily: 'var(--font-sora)' }}>
+                            {tag.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                }
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: [0.3,0.8,1.3,1.8,2.3,2.8,3.3,3.8,4.3][i] ?? 0.3, duration: 0.35, ease: 'easeOut' }}
+                  >
+                    {inner}
+                  </motion.div>
+                )
+              })}
+            </div>
+            </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Info cards — revealed progressively as arc draws */}
-      {([card0Ref, card1Ref, card2Ref, card3Ref] as React.RefObject<HTMLDivElement>[]).map((ref, ci) => (
-        <div key={ci} ref={ref} style={cardBase}>
-          <span style={{ fontSize: '10px', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
-            {ri.cards[ci].category}
-          </span>
-          <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.92)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {ri.cards[ci].icon} {ri.cards[ci].text}
-          </span>
-        </div>
-      ))}
+      </div>
     </div>
   )
 }
@@ -780,12 +1226,12 @@ function GitHubIcon() {
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function LoginPage() {
   const supabase = createClient()
-  const [typingActive, setTypingActive] = useState(false)
+  const [arcIdx,    setArcIdx]    = useState(0)
+  const [arcPhase,  setArcPhase]  = useState<ArcPhase>('idle')
+  const [cardVisible, setCardVisible] = useState(false)
 
-  useEffect(() => {
-    const id = setTimeout(() => setTypingActive(true), 1800)
-    return () => clearTimeout(id)
-  }, [])
+  // Reset card visibility whenever a new arc starts
+  useEffect(() => { setCardVisible(false) }, [arcIdx])
 
   const signIn = (provider: 'google' | 'github') => {
     supabase.auth.signInWithOAuth({
@@ -804,8 +1250,13 @@ export default function LoginPage() {
         animate={{ opacity: 1 }}
         transition={{ duration: 1 }}
       >
-        <GlobeSection />
+        <GlobeSection onArcChange={setArcIdx} onPhaseChange={setArcPhase} onCardVisible={() => setCardVisible(true)} />
       </motion.div>
+
+      {/* Destination panel — right side, desktop only */}
+      <div className="absolute inset-0 z-[2]" style={{ pointerEvents: 'none' }}>
+        <DestinationPanel arcIdx={arcIdx} arcPhase={arcPhase} cardVisible={cardVisible} />
+      </div>
 
       {/* Gradient — darkens left panel for text legibility */}
       <div
@@ -831,29 +1282,20 @@ export default function LoginPage() {
           </motion.h1>
 
           <motion.p
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.3, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-3"
-            style={{ fontFamily: 'var(--font-sora)', fontSize: '20px', color: '#5c5c5c', letterSpacing: '0.005em' }}
+            className="mb-10"
+            style={{ fontFamily: 'var(--font-sora)', fontSize: '16px', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.01em' }}
           >
-            Where should you go next?
+            AI-powered travel planning
           </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.6, duration: 0.5 }}
-            className="mb-12 h-[32px]"
-          >
-            <TypewriterText active={typingActive} />
-          </motion.div>
 
           {/* Label above buttons */}
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 1.9, duration: 0.6 }}
+            transition={{ delay: 1.6, duration: 0.6 }}
             style={{
               fontFamily: 'var(--font-sora)',
               fontSize: '11px', fontWeight: 500,
@@ -874,7 +1316,7 @@ export default function LoginPage() {
                 key={provider}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 2.0 + i * 0.1, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ delay: 1.8 + i * 0.1, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
               >
                 <AuthButton onClick={() => signIn(provider)} icon={icon} label={label} />
               </motion.div>
@@ -882,21 +1324,12 @@ export default function LoginPage() {
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 2.2, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ delay: 2.0, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             >
               <EmailSection />
             </motion.div>
           </div>
 
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 2.5, duration: 1 }}
-            className="mt-10"
-            style={{ fontFamily: 'var(--font-sora)', fontSize: '11px', color: 'rgba(255,255,255,0.15)', letterSpacing: '0.03em' }}
-          >
-            AI-powered travel planning. Personalized to you.
-          </motion.p>
         </div>
       </div>
     </main>
