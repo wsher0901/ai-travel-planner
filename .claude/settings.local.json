@@ -2,7 +2,22 @@
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git -C \"c:\\\\Users\\\\WonseukHer\\\\MyFile\\\\Project\\\\ai-travel-planner\" diff --stat HEAD)",
+      "Bash(git -C \"c:\\\\Users\\\\WonseukHer\\\\MyFile\\\\Project\\\\ai-travel-planner\" show HEAD:frontend/src/app/page.tsx)",
+      "Bash(sed -n '6p' \"c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/frontend/src/app/page.tsx\")",
+      "Bash(sed -n '237,240p' \"c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/frontend/src/app/page.tsx\")",
+      "Bash(sed -n '237,241p' \"c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/frontend/src/app/page.tsx\")",
+      "Bash(sed -n '913,914p' \"c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/frontend/src/app/page.tsx\")",
+      "Bash(node -e \":*)",
+      "Bash(ls \"c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/frontend/src/app/_\"*)",
+      "Bash(npx next:*)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(grep '\"\"zustand\"\"' package.json)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''app/services/gemini_provider.py''\\).read\\(\\)\\); print\\(''syntax ok''\\)\")",
+      "Bash(conda run:*)",
+      "Bash(C:/Users/WonseukHer/miniconda3/envs/travel-planner/python.exe -c \"import ast; ast.parse\\(open\\(''c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/backend/app/services/gemini_provider.py''\\).read\\(\\)\\); print\\(''syntax ok''\\)\")",
+      "Bash(C:/Users/WonseukHer/anaconda3/envs/travel-planner/python.exe -c \"import ast; ast.parse\\(open\\(''c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/backend/app/services/gemini_provider.py''\\).read\\(\\)\\); print\\(''syntax ok''\\)\")"
     ]
   }
 }
