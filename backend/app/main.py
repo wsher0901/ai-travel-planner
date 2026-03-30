@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers.chat import router as chat_router
+from app.routers.plan import router as plan_router
 
 app = FastAPI(
     title="AI Travel Planner API",
@@ -18,6 +19,7 @@ app.add_middleware(
 
 
 app.include_router(chat_router)
+app.include_router(plan_router)
 
 
 @app.get("/health")

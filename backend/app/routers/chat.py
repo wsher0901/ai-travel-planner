@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
     message: str
     mode: str = Field(pattern=r"^(zero-shot|plan|ask)$")
     session_id: Optional[str] = None
+    sliders: Optional[dict] = None
 
 
 @router.post("/stream")
@@ -23,7 +24,7 @@ async def chat_stream(body: ChatRequest):
     async def event_generator():
         async for chunk in provider.stream_response(
             body.message,
-            {"mode": body.mode, "session_id": body.session_id},
+            {"mode": body.mode, "session_id": body.session_id, "sliders": body.sliders},
         ):
             yield f"data: {chunk}\n\n"
 

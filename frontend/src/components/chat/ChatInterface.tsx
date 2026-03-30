@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 'react'
-import { motion } from 'framer-motion'
-import { Compass } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Compass, SlidersHorizontal } from 'lucide-react'
+import SliderPanel from './SliderPanel'
 import { useChatStore, type ChatMode } from '@/store/chatStore'
+import { createClient } from '@/lib/supabase'
 
 // ── Mode config ────────────────────────────────────────────────────────────
 const MODE_CONFIG: Record<ChatMode, { label: string; description: string; placeholder: string; emptyHeading: string; emptyHint: string }> = {
@@ -133,9 +135,12 @@ export default function ChatInterface() {
   const addMessage = useChatStore((s) => s.addMessage)
   const updateMessage = useChatStore((s) => s.updateMessage)
   const setLoading = useChatStore((s) => s.setLoading)
+  const setSessionId = useChatStore((s) => s.setSessionId)
+  const sliders = useChatStore((s) => s.sliders)
 
   const [input, setInput] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
+  const [slidersOpen, setSlidersOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -152,31 +157,69 @@ export default function ChatInterface() {
     ta.style.height = `${Math.min(ta.scrollHeight, 96)}px` // max ~4 lines
   }, [input])
 
-  const handleSend = useCallback(async () => {
-    const trimmed = input.trim()
-    if (!trimmed || isLoading) return
-
-    addMessage('user', trimmed)
-    setInput('')
-    setLoading(true)
-
-    // Add a placeholder assistant message for typing indicator
-    const assistantId = crypto.randomUUID()
+  // Helper: add a placeholder assistant bubble and return its id
+  const addPlaceholder = useCallback(() => {
+    const id = crypto.randomUUID()
     useChatStore.getState().messages.push({
-      id: assistantId,
+      id,
       role: 'assistant',
       content: '',
       timestamp: new Date(),
     })
-    // Trigger re-render with updated messages
     useChatStore.setState({ messages: [...useChatStore.getState().messages] })
-    setStreamingId(assistantId)
+    setStreamingId(id)
+    return id
+  }, [])
+
+  // Zero-shot mode: single request to /plan/generate
+  const handleZeroShot = useCallback(async (trimmed: string) => {
+    const assistantId = addPlaceholder()
+
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/plan/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: trimmed,
+          session_id: sessionId,
+          user_id: user?.id ?? null,
+          sliders,
+        }),
+      })
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+      const data = await res.json()
+
+      const summary = [
+        `✈ ${data.destination}`,
+        `${data.start_date} → ${data.end_date}`,
+        '',
+        data.summary,
+      ].join('\n')
+
+      updateMessage(assistantId, summary)
+      setSessionId(data.trip_plan_id)
+    } catch {
+      updateMessage(assistantId, 'Something went wrong. Please try again.')
+    } finally {
+      setStreamingId(null)
+      setLoading(false)
+    }
+  }, [sessionId, sliders, addPlaceholder, updateMessage, setSessionId, setLoading])
+
+  // Plan / Ask modes: SSE stream to /chat/stream
+  const handleStream = useCallback(async (trimmed: string) => {
+    const assistantId = addPlaceholder()
 
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed, mode, session_id: sessionId }),
+        body: JSON.stringify({ message: trimmed, mode, session_id: sessionId, sliders }),
       })
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -196,7 +239,6 @@ export default function ChatInterface() {
 
         // Parse SSE lines
         const lines = buffer.split('\n')
-        // Keep the last potentially incomplete line in the buffer
         buffer = lines.pop() ?? ''
 
         for (const line of lines) {
@@ -213,7 +255,6 @@ export default function ChatInterface() {
         updateMessage(assistantId, accumulated)
       }
 
-      // If we never got any content, show a fallback
       if (!accumulated) {
         updateMessage(assistantId, 'No response received. Please try again.')
       }
@@ -223,7 +264,22 @@ export default function ChatInterface() {
       setStreamingId(null)
       setLoading(false)
     }
-  }, [input, isLoading, mode, sessionId, addMessage, updateMessage, setLoading])
+  }, [mode, sessionId, sliders, addPlaceholder, updateMessage, setLoading])
+
+  const handleSend = useCallback(async () => {
+    const trimmed = input.trim()
+    if (!trimmed || isLoading) return
+
+    addMessage('user', trimmed)
+    setInput('')
+    setLoading(true)
+
+    if (mode === 'zero-shot') {
+      handleZeroShot(trimmed)
+    } else {
+      handleStream(trimmed)
+    }
+  }, [input, isLoading, mode, addMessage, setLoading, handleZeroShot, handleStream])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -258,37 +314,63 @@ export default function ChatInterface() {
         )}
       </div>
 
-      {/* Input bar */}
+      {/* Slider panel + Input bar */}
       <div className="shrink-0 px-4 pb-4">
-        <div
-          className="mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border p-3"
-          style={{
-            backgroundColor: 'rgba(12,12,12,0.6)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            borderColor: 'rgba(255,255,255,0.08)',
-          }}
-        >
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={MODE_CONFIG[mode].placeholder}
-            rows={1}
-            className="flex-1 resize-none bg-transparent font-[family-name:var(--font-sora)] text-sm text-white placeholder-[rgba(255,255,255,0.25)] outline-none"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!canSend}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-opacity disabled:opacity-25"
-            style={{ backgroundColor: canSend ? 'rgba(245,158,11,0.2)' : 'transparent' }}
+        <div className="mx-auto max-w-2xl">
+          <AnimatePresence>
+            {slidersOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="overflow-hidden pb-2"
+              >
+                <SliderPanel />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div
+            className="flex items-end gap-2 rounded-2xl border p-3"
+            style={{
+              backgroundColor: 'rgba(12,12,12,0.6)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              borderColor: 'rgba(255,255,255,0.08)',
+            }}
           >
-            <Compass
-              size={16}
-              color="rgb(245,158,11)"
+            <button
+              onClick={() => setSlidersOpen((o) => !o)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors"
+              style={{ backgroundColor: slidersOpen ? 'rgba(245,158,11,0.15)' : 'transparent' }}
+            >
+              <SlidersHorizontal
+                size={16}
+                color={slidersOpen ? 'rgb(245,158,11)' : 'rgba(255,255,255,0.35)'}
+              />
+            </button>
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={MODE_CONFIG[mode].placeholder}
+              rows={1}
+              className="flex-1 resize-none bg-transparent font-[family-name:var(--font-sora)] text-sm text-white placeholder-[rgba(255,255,255,0.25)] outline-none"
             />
-          </button>
+            <button
+              onClick={handleSend}
+              disabled={!canSend}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-opacity disabled:opacity-25"
+              style={{ backgroundColor: canSend ? 'rgba(245,158,11,0.2)' : 'transparent' }}
+            >
+              <Compass
+                size={16}
+                color="rgb(245,158,11)"
+              />
+            </button>
+          </div>
         </div>
       </div>
     </div>
