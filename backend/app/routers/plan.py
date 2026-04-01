@@ -50,7 +50,7 @@ async def generate_plan(body: PlanRequest):
     # Save slider config linked to the trip plan
     if body.sliders:
         supabase.table("slider_configs").insert({
-            "trip_plan_id": trip_plan_id,
+            "session_id": trip_plan_id,
             "budget": body.sliders.get("budget", 50),
             "flexibility": body.sliders.get("flexibility", 50),
             "inter_distance": body.sliders.get("inter_distance", 50),
