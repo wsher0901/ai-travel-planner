@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { Compass } from 'lucide-react'
 import SignOutButton from './SignOutButton'
 import ChatInterface from '@/components/chat/ChatInterface'
 
@@ -33,28 +34,75 @@ export default async function PlanPage() {
     <div className="flex min-h-screen flex-col bg-[#0a0a0a]">
       {/* Nav bar */}
       <nav
-        className="flex h-[60px] shrink-0 items-center justify-between border-b px-6"
         style={{
-          backgroundColor: 'rgba(255,255,255,0.03)',
-          borderColor: 'rgba(255,255,255,0.06)',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          height: '56px',
+          background: 'rgba(10,10,10,0.92)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 28px',
         }}
       >
-        <span
-          className="font-[family-name:var(--font-sora)] text-[20px] font-bold text-white"
-        >
-          Roam
-        </span>
+        {/* Amber accent line */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '1px',
+            background: 'linear-gradient(to right, transparent, rgba(245,158,11,0.25), transparent)',
+          }}
+        />
 
-        <div className="flex items-center gap-3">
-          <span className="text-[12px] text-[rgba(255,255,255,0.35)]">
+        {/* Left: Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Compass size={18} color="#f59e0b" />
+          <span
+            style={{
+              fontFamily: 'var(--font-sora)',
+              fontSize: '20px',
+              fontWeight: 700,
+              color: 'white',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Roam
+          </span>
+        </div>
+
+        {/* Right: Email + divider + sign out */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <span
+            style={{
+              fontFamily: 'var(--font-sora)',
+              fontSize: '12px',
+              color: 'rgba(255,255,255,0.28)',
+            }}
+          >
             {user.email}
           </span>
+          <div
+            style={{
+              width: '1px',
+              height: '20px',
+              background: 'rgba(255,255,255,0.08)',
+            }}
+          />
           <SignOutButton />
         </div>
       </nav>
 
       {/* Content area */}
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="flex flex-1 flex-col overflow-hidden" style={{ paddingTop: '56px' }}>
         <ChatInterface />
       </main>
     </div>
