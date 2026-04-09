@@ -16,9 +16,14 @@ export default async function PlanPage() {
           return cookieStore.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // Suppress: cookies can only be set in Server Actions or Route Handlers.
+            // This is expected during SSR reads.
+          }
         },
       },
     }
