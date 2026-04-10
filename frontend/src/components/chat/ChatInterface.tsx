@@ -6,6 +6,7 @@ import { ArrowUp, Compass, SlidersHorizontal } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import SliderPanel from './SliderPanel'
 import { useChatStore, type ChatMode } from '@/store/chatStore'
+import { useUIStore } from '@/store/uiStore'
 import { createClient } from '@/lib/supabase'
 
 // ── Mode config ────────────────────────────────────────────────────────────
@@ -128,29 +129,62 @@ function ModeSelector({ onSelect }: { onSelect: (newMode: ChatMode) => void }) {
 // ── Streaming dots ─────────────────────────────────────────────────────────
 function StreamingDots({ modeColor }: { modeColor: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-      {[0, 1, 2].map((i) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ width: '48px', height: '4px', borderRadius: '2px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
         <motion.div
-          key={i}
-          style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: modeColor }}
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
+          style={{ height: '100%', width: '50%', borderRadius: '2px', background: modeColor, opacity: 0.6 }}
+          animate={{ x: ['-100%', '200%'] }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
         />
-      ))}
+      </div>
+      <span style={{ fontSize: '12px', color: modeColor, opacity: 0.5, fontFamily: 'var(--font-sora)', fontStyle: 'italic' }}>
+        thinking
+      </span>
     </div>
   )
 }
 
 // ── Message bubble ─────────────────────────────────────────────────────────
+function OpenDockButton() {
+  const setLayoutMode = useUIStore((s) => s.setLayoutMode)
+  return (
+    <button
+      onClick={() => setLayoutMode('split')}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        marginTop: '12px',
+        padding: '10px 20px',
+        borderRadius: '9999px',
+        background: 'rgba(245,158,11,0.15)',
+        border: '1px solid rgba(245,158,11,0.4)',
+        color: '#fbbf24',
+        fontFamily: 'var(--font-sora)',
+        fontSize: '14px',
+        fontWeight: 500,
+        cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.25)' }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.15)' }}
+    >
+      Open Visual Planner ✨
+    </button>
+  )
+}
+
 function MessageBubble({ role, content, modeColor, isTyping, timestamp }: { role: 'user' | 'assistant'; content: string; modeColor: string; isTyping?: boolean; timestamp: Date }) {
   const isUser = role === 'user'
   const timeStr = timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const CTA_MARKER = '[CTA:OPEN_DOCK]'
+  const hasCTA = !isUser && content.includes(CTA_MARKER)
+  const textContent = hasCTA ? content.replace(CTA_MARKER, '').trimEnd() : content
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+      initial={isUser ? { opacity: 0, y: 8, scale: 0.97, filter: 'blur(2px)' } : { opacity: 0, y: 10 }}
+      animate={isUser ? { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' } : { opacity: 1, y: 0 }}
+      transition={isUser ? { duration: 0.2, ease: [0.2, 0, 0, 1] } : { duration: 0.25 }}
       className="group"
       style={{
         alignSelf: isUser ? 'flex-end' : 'flex-start',
@@ -203,8 +237,9 @@ function MessageBubble({ role, content, modeColor, isTyping, timestamp }: { role
                   li: ({ children }) => <li style={{ marginBottom: '4px' }}>{children}</li>,
                 }}
               >
-                {content}
+                {textContent}
               </ReactMarkdown>
+              {hasCTA && <OpenDockButton />}
               {isTyping && (
                 <motion.span
                   style={{ color: modeColor, fontWeight: 300, marginLeft: '1px' }}
@@ -246,6 +281,9 @@ function InputPill({
   textareaRef,
   onFocus,
   onBlur,
+  isFocused,
+  hasText,
+  hasStarted,
 }: {
   slidersOpen: boolean
   onToggleSliders: () => void
@@ -258,36 +296,61 @@ function InputPill({
   textareaRef: React.RefObject<HTMLTextAreaElement>
   onFocus: () => void
   onBlur: () => void
+  isFocused: boolean
+  hasText: boolean
+  hasStarted: boolean
 }) {
+  const [sliderBtnHovered, setSliderBtnHovered] = useState(false)
+
+  const borderColor = isFocused && hasText
+    ? `${MODE_COLORS[mode].color}40`
+    : isFocused
+    ? 'rgba(255,255,255,0.15)'
+    : 'rgba(255,255,255,0.1)'
+  const boxShadow = isFocused && hasText
+    ? `0 0 12px ${MODE_COLORS[mode].color}15`
+    : 'none'
+
   return (
     <motion.div
       transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
       style={{
         background: 'rgba(255,255,255,0.06)',
-        border: '1px solid rgba(255,255,255,0.1)',
+        border: `1px solid ${borderColor}`,
         borderRadius: '20px',
         padding: '8px 8px 8px 12px',
         display: 'flex',
-        alignItems: 'flex-end',
+        alignItems: 'center',
         gap: '8px',
+        boxShadow,
+        transition: 'border-color 0.2s, box-shadow 0.2s',
       }}
     >
       <button
         onClick={onToggleSliders}
+        onMouseEnter={() => setSliderBtnHovered(true)}
+        onMouseLeave={() => setSliderBtnHovered(false)}
         style={{
-          flexShrink: 0,
+          width: '36px',
+          height: '36px',
+          borderRadius: '8px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '8px',
-          background: 'none',
+          flexShrink: 0,
+          padding: 0,
           border: 'none',
           cursor: 'pointer',
-          color: slidersOpen ? 'white' : 'rgba(255,255,255,0.4)',
-          transition: 'color 0.15s',
+          background: sliderBtnHovered
+            ? 'rgba(255,255,255,0.08)'
+            : slidersOpen
+            ? 'rgba(255,255,255,0.1)'
+            : 'transparent',
+          color: slidersOpen ? 'white' : 'rgba(255,255,255,0.35)',
+          transition: 'background 0.15s, color 0.15s',
         }}
       >
-        <SlidersHorizontal size={15} color={slidersOpen ? 'white' : 'rgba(255,255,255,0.4)'} />
+        <SlidersHorizontal size={18} />
       </button>
 
       <textarea
@@ -297,7 +360,7 @@ function InputPill({
         onKeyDown={onKeyDown}
         onFocus={onFocus}
         onBlur={onBlur}
-        placeholder={MODE_CONFIG[mode].placeholder}
+        placeholder={hasStarted ? 'Message Roam...' : MODE_CONFIG[mode].placeholder}
         rows={1}
         style={{
           flex: 1,
@@ -308,13 +371,14 @@ function InputPill({
           fontFamily: 'var(--font-sora)',
           fontSize: '15px',
           resize: 'none',
-          minHeight: '40px',
+          minHeight: '36px',
           maxHeight: '200px',
-          padding: '8px 0',
+          padding: '6px 0',
           lineHeight: '1.5',
           overflowY: 'auto',
+          scrollbarWidth: 'none',
         }}
-        className="placeholder-[rgba(255,255,255,0.25)]"
+        className="placeholder-[rgba(255,255,255,0.25)] [&::-webkit-scrollbar]:hidden"
       />
 
       <motion.button
@@ -606,8 +670,30 @@ export default function ChatInterface() {
         data.summary,
       ].join('\n')
 
-      updateMessage(assistantId, summary)
+      const words = summary.split(' ')
+      let accumulated = ''
+      for (const word of words) {
+        accumulated += (accumulated ? ' ' : '') + word
+        updateMessage(assistantId, accumulated)
+        await new Promise(r => setTimeout(r, 25))
+      }
+
       setSessionId(data.trip_plan_id)
+
+      await new Promise(r => setTimeout(r, 1500))
+      const ctaText = "Your trip plan is ready! Want me to open the visual planner? You'll get an interactive timeline, map, weather forecasts, and budget breakdown.\n\n[CTA:OPEN_DOCK]"
+      const ctaId = crypto.randomUUID()
+      useChatStore.getState().messages.push({ id: ctaId, role: 'assistant', content: '', timestamp: new Date() })
+      useChatStore.setState({ messages: [...useChatStore.getState().messages] })
+      const ctaWords = ctaText.split(' ')
+      let ctaAccumulated = ''
+      for (const word of ctaWords) {
+        ctaAccumulated += (ctaAccumulated ? ' ' : '') + word
+        useChatStore.setState((s) => ({
+          messages: s.messages.map((m) => m.id === ctaId ? { ...m, content: ctaAccumulated } : m),
+        }))
+        await new Promise(r => setTimeout(r, 25))
+      }
     } catch {
       updateMessage(assistantId, 'Something went wrong. Please try again.')
     } finally {
@@ -708,6 +794,9 @@ export default function ChatInterface() {
     textareaRef,
     onFocus: () => setInputFocused(true),
     onBlur: () => setInputFocused(false),
+    isFocused: inputFocused,
+    hasText: input.trim().length > 0,
+    hasStarted,
   }
 
   return (
@@ -760,6 +849,19 @@ export default function ChatInterface() {
                     }}
                   >
                     <InputPill {...pillProps} />
+                    <AnimatePresence>
+                      {slidersOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3 }}
+                          style={{ overflow: 'hidden', paddingTop: '12px' }}
+                        >
+                          <SliderPanel />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 )}
               </EmptyState>

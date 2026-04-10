@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { useUIStore } from '@/store/uiStore'
@@ -17,24 +17,16 @@ const BUTTON_CLASS =
 export default function PlanLayout({ chatPanel, dockPanel }: PlanLayoutProps) {
   const { layoutMode, setLayoutMode, isTransitioning, setIsTransitioning } = useUIStore()
   const messages = useChatStore((s) => s.messages)
-  const hasAutoTriggered = useRef<boolean>(false)
 
   const hasPlan = messages.length > 0
 
   useEffect(() => {
-    if (hasPlan && !hasAutoTriggered.current) {
-      setLayoutMode('split')
-      hasAutoTriggered.current = true
-    }
-  }, [hasPlan, setLayoutMode])
+    setIsTransitioning(true)
+  }, [layoutMode, setIsTransitioning])
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <motion.div
-        layout
-        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-        onLayoutAnimationStart={() => setIsTransitioning(true)}
-        onLayoutAnimationComplete={() => setIsTransitioning(false)}
+      <div
         className={
           layoutMode === 'split'
             ? 'relative border-r border-zinc-800/50'
@@ -42,9 +34,17 @@ export default function PlanLayout({ chatPanel, dockPanel }: PlanLayoutProps) {
         }
         style={
           layoutMode === 'discovery'
-            ? { width: '100%' }
-            : { width: '380px', minWidth: '380px' }
+            ? {
+                width: '100%',
+                transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+              }
+            : {
+                width: '440px',
+                minWidth: '440px',
+                transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+              }
         }
+        onTransitionEnd={() => setIsTransitioning(false)}
       >
         {chatPanel}
         {layoutMode === 'discovery' && hasPlan && (
@@ -55,7 +55,7 @@ export default function PlanLayout({ chatPanel, dockPanel }: PlanLayoutProps) {
             <PanelRightOpen size={14} />
           </button>
         )}
-      </motion.div>
+      </div>
 
       <AnimatePresence>
         {layoutMode === 'split' && (
