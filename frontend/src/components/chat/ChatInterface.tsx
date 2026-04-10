@@ -42,13 +42,6 @@ const MODE_COLORS: Record<ChatMode, { color: string; glow: string; headlineColor
 
 const MODES_ORDER: ChatMode[] = ['zero-shot', 'plan', 'ask']
 
-// ── Swipe variants ─────────────────────────────────────────────────────────
-const swipeVariants = {
-  initial: (dir: number) => ({ opacity: 0, x: dir * 120, scale: 0.97 }),
-  animate: { opacity: 1, x: 0, scale: 1 },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -120, scale: 0.97 }),
-}
-
 // ── Mode selector ──────────────────────────────────────────────────────────
 const MODE_DESCRIPTIONS: Record<ChatMode, string> = {
   'zero-shot': 'Get a complete trip plan instantly',
@@ -268,7 +261,6 @@ function InputPill({
 }) {
   return (
     <motion.div
-      layoutId="input-pill"
       transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
       style={{
         background: 'rgba(255,255,255,0.06)',
@@ -543,7 +535,8 @@ export default function ChatInterface() {
   const [streamingId, setStreamingId] = useState<string | null>(null)
   const [slidersOpen, setSlidersOpen] = useState(false)
   const [hasStarted, setHasStarted] = useState(false)
-  const directionRef = useRef(1)
+  const [slideDirection, setSlideDirection] = useState(0)
+  const prevModeIndexRef = useRef<number>(MODES_ORDER.indexOf(mode))
   const [inputFocused, setInputFocused] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -562,10 +555,12 @@ export default function ChatInterface() {
   }, [input])
 
   const handleModeSelect = useCallback((newMode: ChatMode) => {
-    const MODES = ['zero-shot', 'plan', 'ask']
-    directionRef.current = MODES.indexOf(newMode) > MODES.indexOf(mode) ? 1 : -1
+    const newIdx = MODES_ORDER.indexOf(newMode)
+    const dir = newIdx > prevModeIndexRef.current ? 1 : -1
+    setSlideDirection(dir)
+    prevModeIndexRef.current = newIdx
     setMode(newMode)
-  }, [mode, setMode])
+  }, [setMode])
 
   // Helper: add a placeholder assistant bubble and return its id
   const addPlaceholder = useCallback(() => {
@@ -728,16 +723,20 @@ export default function ChatInterface() {
 
       {/* Message thread */}
       <div style={{ flex: 1, overflow: 'hidden', zIndex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <AnimatePresence mode="wait" custom={directionRef.current}>
+        <AnimatePresence mode="wait" custom={slideDirection}>
           <motion.div
             key={mode}
-            custom={directionRef.current}
-            variants={swipeVariants}
-            initial="initial"
-            animate="animate"
+            custom={slideDirection}
+            variants={{
+              enter: (dir: number) => ({ opacity: 0, x: dir * 60 }),
+              center: { opacity: 1, x: 0 },
+              exit: (dir: number) => ({ opacity: 0, x: dir * -60 }),
+            }}
+            initial="enter"
+            animate="center"
             exit="exit"
-            transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
-            style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}
           >
             {messages.length === 0 ? (
               <EmptyState
@@ -794,41 +793,41 @@ export default function ChatInterface() {
                 <div ref={bottomRef} />
               </div>
             )}
+
+            {/* Fixed input bar — only when hasStarted */}
+            {hasStarted && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  padding: '24px 24px 32px',
+                  background: 'linear-gradient(to top, #080808 70%, transparent)',
+                  zIndex: 10,
+                }}
+              >
+                <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+                  <AnimatePresence>
+                    {slidersOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        style={{ overflow: 'hidden', paddingBottom: '12px' }}
+                      >
+                        <SliderPanel />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <InputPill {...pillProps} />
+                </div>
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
-
-      {/* Fixed input bar — only when hasStarted */}
-      {hasStarted && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: '24px 24px 32px',
-            background: 'linear-gradient(to top, #080808 70%, transparent)',
-            zIndex: 10,
-          }}
-        >
-          <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-            <AnimatePresence>
-              {slidersOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  style={{ overflow: 'hidden', paddingBottom: '12px' }}
-                >
-                  <SliderPanel />
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <InputPill {...pillProps} />
-          </div>
-        </div>
-      )}
     </div>
   )
 }
