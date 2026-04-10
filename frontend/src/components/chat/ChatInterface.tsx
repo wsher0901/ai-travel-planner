@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 'react'
+import React, { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Compass, SlidersHorizontal } from 'lucide-react'
+import { ArrowUp, Compass, SlidersHorizontal } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import SliderPanel from './SliderPanel'
 import { useChatStore, type ChatMode } from '@/store/chatStore'
 import { createClient } from '@/lib/supabase'
@@ -12,14 +13,14 @@ const MODE_CONFIG: Record<ChatMode, { label: string; description: string; placeh
   'zero-shot': {
     label: 'Zero-Shot',
     description: 'Get a full plan instantly',
-    placeholder: "Tell me when you're free and I'll plan everything...",
+    placeholder: "When are you free? Where are you flying from?",
     emptyHeading: 'Zero-Shot Mode',
     emptyHint: "Tell me your dates, budget, and vibe — I'll handle the rest.",
   },
   plan: {
     label: 'Plan',
     description: 'Build your trip together',
-    placeholder: 'Where are you thinking of going?',
+    placeholder: "Let's build your trip together...",
     emptyHeading: 'Plan Mode',
     emptyHint: "Let's build your perfect trip step by step.",
   },
@@ -131,16 +132,16 @@ function ModeSelector({ onSelect }: { onSelect: (newMode: ChatMode) => void }) {
   )
 }
 
-// ── Typing indicator ───────────────────────────────────────────────────────
-function TypingIndicator() {
+// ── Streaming dots ─────────────────────────────────────────────────────────
+function StreamingDots({ modeColor }: { modeColor: string }) {
   return (
-    <div className="flex items-center gap-1 px-1">
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
       {[0, 1, 2].map((i) => (
-        <motion.span
+        <motion.div
           key={i}
-          className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400/60"
+          style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: modeColor }}
           animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+          transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
         />
       ))}
     </div>
@@ -148,44 +149,204 @@ function TypingIndicator() {
 }
 
 // ── Message bubble ─────────────────────────────────────────────────────────
-function MessageBubble({ role, content, isTyping }: { role: 'user' | 'assistant'; content: string; isTyping?: boolean }) {
+function MessageBubble({ role, content, modeColor, isTyping, timestamp }: { role: 'user' | 'assistant'; content: string; modeColor: string; isTyping?: boolean; timestamp: Date }) {
   const isUser = role === 'user'
+  const timeStr = timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-      className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+      transition={{ duration: 0.25 }}
+      className="group"
+      style={{
+        alignSelf: isUser ? 'flex-end' : 'flex-start',
+        maxWidth: isUser ? '70%' : '80%',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '10px',
+      }}
     >
       {!isUser && (
-        <div className="mr-3 mt-[3px] flex h-5 w-5 shrink-0 items-center justify-center">
-          <Compass size={12} strokeWidth={1.5} color="rgba(245,158,11,0.7)" />
-        </div>
-      )}
-      {isUser ? (
         <div
-          className="max-w-[70%] px-4 py-2.5 font-[family-name:var(--font-sora)] text-sm leading-relaxed"
           style={{
-            backgroundColor: 'rgba(245,158,11,0.07)',
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            backgroundColor: modeColor,
+            marginTop: '7px',
+            flexShrink: 0,
+          }}
+        />
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div
+          style={isUser ? {
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '18px 18px 4px 18px',
+            padding: '12px 16px',
+            fontSize: '14px',
+            color: 'rgba(255,255,255,0.9)',
+            fontFamily: 'var(--font-sora)',
+          } : {
+            background: 'transparent',
+            border: 'none',
+            padding: '4px 0',
+            fontSize: '14px',
             color: 'rgba(255,255,255,0.85)',
-            borderRadius: '14px 14px 3px 14px',
-            border: '1px solid rgba(245,158,11,0.11)',
+            fontFamily: 'var(--font-sora)',
+            lineHeight: '1.7',
           }}
         >
-          {content}
+          {isUser ? content : (
+            <>
+              <ReactMarkdown
+                components={{
+                  strong: ({ children }) => <strong style={{ color: 'white', fontWeight: 600 }}>{children}</strong>,
+                  p: ({ children }) => <p style={{ marginBottom: '8px' }}>{children}</p>,
+                  ol: ({ children }) => <ol style={{ paddingLeft: '20px', marginBottom: '8px' }}>{children}</ol>,
+                  ul: ({ children }) => <ul style={{ paddingLeft: '20px', marginBottom: '8px' }}>{children}</ul>,
+                  li: ({ children }) => <li style={{ marginBottom: '4px' }}>{children}</li>,
+                }}
+              >
+                {content}
+              </ReactMarkdown>
+              {isTyping && (
+                <motion.span
+                  style={{ color: modeColor, fontWeight: 300, marginLeft: '1px' }}
+                  animate={{ opacity: [1, 0, 1] }}
+                  transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+                >|</motion.span>
+              )}
+            </>
+          )}
         </div>
-      ) : (
-        <div
-          className="max-w-[75%] border-l-2 py-0.5 pl-3.5 font-[family-name:var(--font-sora)] text-sm leading-relaxed"
+        <span
+          className="opacity-0 group-hover:opacity-100"
           style={{
-            borderColor: 'rgba(245,158,11,0.3)',
-            color: 'rgba(255,255,255,0.68)',
+            fontSize: '10px',
+            color: 'rgba(255,255,255,0.2)',
+            fontFamily: 'var(--font-sora)',
+            marginTop: '4px',
+            textAlign: isUser ? 'right' : 'left',
+            transition: 'opacity 0.2s',
           }}
         >
-          {isTyping ? <TypingIndicator /> : content}
-        </div>
-      )}
+          {timeStr}
+        </span>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Input pill ─────────────────────────────────────────────────────────────
+function InputPill({
+  slidersOpen,
+  onToggleSliders,
+  input,
+  onInputChange,
+  onKeyDown,
+  onSend,
+  canSend,
+  mode,
+  textareaRef,
+  onFocus,
+  onBlur,
+}: {
+  slidersOpen: boolean
+  onToggleSliders: () => void
+  input: string
+  onInputChange: (value: string) => void
+  onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void
+  onSend: () => void
+  canSend: boolean
+  mode: ChatMode
+  textareaRef: React.RefObject<HTMLTextAreaElement>
+  onFocus: () => void
+  onBlur: () => void
+}) {
+  return (
+    <motion.div
+      layoutId="input-pill"
+      transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
+      style={{
+        background: 'rgba(255,255,255,0.06)',
+        border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: '20px',
+        padding: '8px 8px 8px 12px',
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: '8px',
+      }}
+    >
+      <button
+        onClick={onToggleSliders}
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '8px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          color: slidersOpen ? 'white' : 'rgba(255,255,255,0.4)',
+          transition: 'color 0.15s',
+        }}
+      >
+        <SlidersHorizontal size={15} color={slidersOpen ? 'white' : 'rgba(255,255,255,0.4)'} />
+      </button>
+
+      <textarea
+        ref={textareaRef}
+        value={input}
+        onChange={(e) => onInputChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        placeholder={MODE_CONFIG[mode].placeholder}
+        rows={1}
+        style={{
+          flex: 1,
+          background: 'transparent',
+          border: 'none',
+          outline: 'none',
+          color: 'white',
+          fontFamily: 'var(--font-sora)',
+          fontSize: '15px',
+          resize: 'none',
+          minHeight: '40px',
+          maxHeight: '200px',
+          padding: '8px 0',
+          lineHeight: '1.5',
+          overflowY: 'auto',
+        }}
+        className="placeholder-[rgba(255,255,255,0.25)]"
+      />
+
+      <motion.button
+        onClick={onSend}
+        disabled={!canSend}
+        whileTap={canSend ? { scale: 0.9 } : {}}
+        whileHover={canSend ? { opacity: 0.85 } : {}}
+        style={{
+          flexShrink: 0,
+          width: '36px',
+          height: '36px',
+          borderRadius: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: MODE_COLORS[mode].color,
+          border: 'none',
+          cursor: canSend ? 'pointer' : 'default',
+          opacity: canSend ? 1 : 0.3,
+          transition: 'opacity 0.2s',
+        }}
+      >
+        <ArrowUp size={18} color="#080808" />
+      </motion.button>
     </motion.div>
   )
 }
@@ -234,7 +395,31 @@ function ChipButton({ label, onClick, chipBorder }: { label: string; onClick: ()
   )
 }
 
-function EmptyState({ mode, onChipClick, modeColor, headlineColor, chipBorder }: { mode: ChatMode; onChipClick: (text: string) => void; modeColor: string; headlineColor: string; chipBorder: string }) {
+const PARTICLES = [
+  { x: '12%',  y: '18%', duration: 6.2, delay: 0 },
+  { x: '78%',  y: '32%', duration: 4.8, delay: 1.1 },
+  { x: '55%',  y: '72%', duration: 7.0, delay: 0.6 },
+  { x: '28%',  y: '61%', duration: 5.4, delay: 2.3 },
+  { x: '88%',  y: '80%', duration: 6.6, delay: 1.7 },
+]
+
+function EmptyState({
+  mode,
+  onChipClick,
+  modeColor,
+  headlineColor,
+  chipBorder,
+  hasStarted,
+  children,
+}: {
+  mode: ChatMode
+  onChipClick: (text: string) => void
+  modeColor: string
+  headlineColor: string
+  chipBorder: string
+  hasStarted: boolean
+  children?: React.ReactNode
+}) {
   const content = EMPTY_STATE_CONTENT[mode]
   return (
     <div
@@ -250,48 +435,93 @@ function EmptyState({ mode, onChipClick, modeColor, headlineColor, chipBorder }:
         padding: '0 24px',
       }}
     >
-      <Compass
-        size={28}
-        color={modeColor}
-        style={{ filter: `drop-shadow(0 0 12px ${modeColor}66)` }}
-      />
-      <p
-        style={{
-          fontFamily: 'var(--font-sora)',
-          fontSize: '42px',
-          fontWeight: 700,
-          color: headlineColor,
-          textAlign: 'center',
-          letterSpacing: '-0.02em',
-          margin: 0,
-        }}
-      >
-        {content.headline}
-      </p>
-      <p
-        style={{
-          fontSize: '16px',
-          color: 'rgba(255,255,255,0.32)',
-          fontFamily: 'var(--font-sora)',
-          textAlign: 'center',
-          maxWidth: '420px',
-        }}
-      >
-        {content.subtext}
-      </p>
-      <div
-        style={{
-          display: 'flex',
-          gap: '10px',
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          marginTop: '8px',
-        }}
-      >
-        {content.chips.map((chip) => (
-          <ChipButton key={chip} label={chip} onClick={() => onChipClick(chip)} chipBorder={chipBorder} />
-        ))}
-      </div>
+      {/* Ambient particles */}
+      <AnimatePresence>
+        {!hasStarted && (
+          <motion.div
+            key="particles"
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}
+          >
+            {PARTICLES.map((p, i) => (
+              <motion.div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: p.x,
+                  top: p.y,
+                  width: '3px',
+                  height: '3px',
+                  borderRadius: '50%',
+                  background: modeColor,
+                  opacity: 0.1,
+                }}
+                animate={{ y: [0, -18, 0], opacity: [0.1, 0.2, 0.1] }}
+                transition={{ duration: p.duration, repeat: Infinity, delay: p.delay, ease: 'easeInOut' }}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Headline, subtext, chips */}
+      <AnimatePresence>
+        {!hasStarted && (
+          <motion.div
+            key="content"
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            style={{ position: 'absolute', top: '40%', transform: 'translateY(-50%)', left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}
+          >
+            <Compass
+              size={28}
+              color={modeColor}
+              style={{ filter: `drop-shadow(0 0 12px ${modeColor}66)` }}
+            />
+            <p
+              style={{
+                fontFamily: 'var(--font-sora)',
+                fontSize: '42px',
+                fontWeight: 700,
+                color: headlineColor,
+                textAlign: 'center',
+                letterSpacing: '-0.02em',
+                margin: 0,
+              }}
+            >
+              {content.headline}
+            </p>
+            <p
+              style={{
+                fontSize: '16px',
+                color: 'rgba(255,255,255,0.32)',
+                fontFamily: 'var(--font-sora)',
+                textAlign: 'center',
+                maxWidth: '420px',
+              }}
+            >
+              {content.subtext}
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                gap: '10px',
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+                marginTop: '8px',
+              }}
+            >
+              {content.chips.map((chip) => (
+                <ChipButton key={chip} label={chip} onClick={() => onChipClick(chip)} chipBorder={chipBorder} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Input pill injected from parent when !hasStarted */}
+      {children}
     </div>
   )
 }
@@ -312,6 +542,7 @@ export default function ChatInterface() {
   const [input, setInput] = useState('')
   const [streamingId, setStreamingId] = useState<string | null>(null)
   const [slidersOpen, setSlidersOpen] = useState(false)
+  const [hasStarted, setHasStarted] = useState(false)
   const directionRef = useRef(1)
   const [inputFocused, setInputFocused] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -327,7 +558,7 @@ export default function ChatInterface() {
     const ta = textareaRef.current
     if (!ta) return
     ta.style.height = 'auto'
-    ta.style.height = `${Math.min(ta.scrollHeight, 96)}px` // max ~4 lines
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
   }, [input])
 
   const handleModeSelect = useCallback((newMode: ChatMode) => {
@@ -449,6 +680,7 @@ export default function ChatInterface() {
     const trimmed = input.trim()
     if (!trimmed || isLoading) return
 
+    setHasStarted(true)
     addMessage('user', trimmed)
     setInput('')
     setLoading(true)
@@ -469,6 +701,20 @@ export default function ChatInterface() {
 
   const canSend = input.trim().length > 0 && !isLoading
 
+  const pillProps = {
+    slidersOpen,
+    onToggleSliders: () => setSlidersOpen((o) => !o),
+    input,
+    onInputChange: setInput,
+    onKeyDown: handleKeyDown,
+    onSend: handleSend,
+    canSend,
+    mode,
+    textareaRef,
+    onFocus: () => setInputFocused(true),
+    onBlur: () => setInputFocused(false),
+  }
+
   return (
     <div style={{ height: 'calc(100vh - 56px)', display: 'flex', flexDirection: 'column', position: 'relative', background: '#080808', overflow: 'hidden' }}>
       {/* Background glow */}
@@ -481,7 +727,7 @@ export default function ChatInterface() {
       <ModeSelector onSelect={handleModeSelect} />
 
       {/* Message thread */}
-      <div className="flex flex-col px-6 py-6" style={{ flex: 1, overflow: 'hidden', zIndex: 1, position: 'relative' }}>
+      <div style={{ flex: 1, overflow: 'hidden', zIndex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
         <AnimatePresence mode="wait" custom={directionRef.current}>
           <motion.div
             key={mode}
@@ -494,15 +740,55 @@ export default function ChatInterface() {
             style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}
           >
             {messages.length === 0 ? (
-              <EmptyState mode={mode} onChipClick={setInput} modeColor={MODE_COLORS[mode].color} headlineColor={MODE_COLORS[mode].headlineColor} chipBorder={MODE_COLORS[mode].chipBorder} />
+              <EmptyState
+                mode={mode}
+                onChipClick={setInput}
+                modeColor={MODE_COLORS[mode].color}
+                headlineColor={MODE_COLORS[mode].headlineColor}
+                chipBorder={MODE_COLORS[mode].chipBorder}
+                hasStarted={hasStarted}
+              >
+                {!hasStarted && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '62%',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: '100%',
+                      maxWidth: '720px',
+                      padding: '0 24px',
+                    }}
+                  >
+                    <InputPill {...pillProps} />
+                  </div>
+                )}
+              </EmptyState>
             ) : (
-              <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
+              <div
+                className="[&::-webkit-scrollbar]:hidden"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  overflowY: 'auto',
+                  padding: '24px 24px 160px',
+                  maxWidth: '720px',
+                  margin: '0 auto',
+                  width: '100%',
+                  flex: 1,
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                }}
+              >
                 {messages.map((msg) => (
                   <MessageBubble
                     key={msg.id}
                     role={msg.role}
                     content={msg.content}
-                    isTyping={msg.id === streamingId && msg.content === ''}
+                    modeColor={MODE_COLORS[mode].color}
+                    isTyping={msg.id === streamingId}
+                    timestamp={msg.timestamp}
                   />
                 ))}
                 <div ref={bottomRef} />
@@ -512,76 +798,37 @@ export default function ChatInterface() {
         </AnimatePresence>
       </div>
 
-      {/* Slider panel + Input bar */}
-      <div className="shrink-0 px-6" style={{ position: 'relative', zIndex: 1, paddingBottom: '24px', paddingTop: '12px' }}>
-        <div className="mx-auto max-w-2xl">
-          <AnimatePresence>
-            {slidersOpen && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="overflow-hidden pb-3"
-              >
-                <SliderPanel />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div
-            className="flex items-end gap-3 rounded-xl border px-4 py-3"
-            style={{
-              backgroundColor: 'rgba(8,8,8,0.72)',
-              backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)',
-              borderColor: inputFocused ? `${MODE_COLORS[mode].color}40` : 'rgba(255,255,255,0.07)',
-              boxShadow: '0 0 0 1px rgba(245,158,11,0.04), 0 8px 32px rgba(0,0,0,0.45)',
-              transition: 'border-color 0.2s',
-            }}
-          >
-            <button
-              onClick={() => setSlidersOpen((o) => !o)}
-              className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all"
-              style={{
-                backgroundColor: slidersOpen ? 'rgba(245,158,11,0.1)' : 'transparent',
-                border: `1px solid ${slidersOpen ? 'rgba(245,158,11,0.22)' : 'rgba(255,255,255,0.07)'}`,
-              }}
-            >
-              <SlidersHorizontal
-                size={13}
-                color={slidersOpen ? 'rgb(245,158,11)' : 'rgba(255,255,255,0.28)'}
-              />
-            </button>
-
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
-              placeholder={MODE_CONFIG[mode].placeholder}
-              rows={1}
-              className="flex-1 resize-none bg-transparent font-[family-name:var(--font-sora)] text-sm leading-relaxed text-white placeholder-[rgba(255,255,255,0.18)] outline-none"
-            />
-
-            <motion.button
-              onClick={handleSend}
-              disabled={!canSend}
-              whileTap={canSend ? { scale: 0.88 } : {}}
-              className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all"
-              style={{
-                backgroundColor: canSend ? 'rgba(245,158,11,0.15)' : 'transparent',
-                border: `1px solid ${canSend ? 'rgba(245,158,11,0.28)' : 'rgba(255,255,255,0.07)'}`,
-                opacity: canSend ? 1 : 0.28,
-              }}
-            >
-              <Compass size={13} color="rgb(245,158,11)" />
-            </motion.button>
+      {/* Fixed input bar — only when hasStarted */}
+      {hasStarted && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: '24px 24px 32px',
+            background: 'linear-gradient(to top, #080808 70%, transparent)',
+            zIndex: 10,
+          }}
+        >
+          <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+            <AnimatePresence>
+              {slidersOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  style={{ overflow: 'hidden', paddingBottom: '12px' }}
+                >
+                  <SliderPanel />
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <InputPill {...pillProps} />
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
