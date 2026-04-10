@@ -145,38 +145,72 @@ function StreamingDots({ modeColor }: { modeColor: string }) {
 }
 
 // ── Message bubble ─────────────────────────────────────────────────────────
-function OpenDockButton() {
+function PostPlanCTA() {
   const setLayoutMode = useUIStore((s) => s.setLayoutMode)
+  const setMode = useChatStore((s) => s.setMode)
+  const clearMessages = useChatStore((s) => s.clearMessages)
+  const setSessionId = useChatStore((s) => s.setSessionId)
+
+  const btnBase: React.CSSProperties = {
+    padding: '10px 20px',
+    borderRadius: '9999px',
+    fontFamily: 'var(--font-sora)',
+    fontSize: '13px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+    display: 'inline-flex',
+    alignItems: 'center',
+  }
+
   return (
-    <button
-      onClick={() => setLayoutMode('split')}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        marginTop: '12px',
-        padding: '10px 20px',
-        borderRadius: '9999px',
-        background: 'rgba(245,158,11,0.15)',
-        border: '1px solid rgba(245,158,11,0.4)',
-        color: '#fbbf24',
-        fontFamily: 'var(--font-sora)',
-        fontSize: '14px',
-        fontWeight: 500,
-        cursor: 'pointer',
-      }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.25)' }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.15)' }}
-    >
-      Open Visual Planner ✨
-    </button>
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+      <button
+        onClick={() => setLayoutMode('split')}
+        style={{
+          ...btnBase,
+          background: 'rgba(245,158,11,0.15)',
+          border: '1px solid rgba(245,158,11,0.4)',
+          color: '#fbbf24',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.25)' }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.15)' }}
+      >
+        Open Visual Planner ✨
+      </button>
+      <button
+        onClick={() => {
+          setMode('zero-shot')
+          clearMessages()
+          setSessionId(null)
+        }}
+        style={{
+          ...btnBase,
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          color: 'rgba(255,255,255,0.5)',
+        }}
+        onMouseEnter={(e) => {
+          const el = e.currentTarget as HTMLButtonElement
+          el.style.border = '1px solid rgba(255,255,255,0.25)'
+          el.style.color = 'rgba(255,255,255,0.7)'
+        }}
+        onMouseLeave={(e) => {
+          const el = e.currentTarget as HTMLButtonElement
+          el.style.border = '1px solid rgba(255,255,255,0.12)'
+          el.style.color = 'rgba(255,255,255,0.5)'
+        }}
+      >
+        Start a New Plan
+      </button>
+    </div>
   )
 }
 
 function MessageBubble({ role, content, modeColor, isTyping, timestamp }: { role: 'user' | 'assistant'; content: string; modeColor: string; isTyping?: boolean; timestamp: Date }) {
   const isUser = role === 'user'
   const timeStr = timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-  const CTA_MARKER = '[CTA:OPEN_DOCK]'
+  const CTA_MARKER = '[CTA:POST_PLAN]'
   const hasCTA = !isUser && content.includes(CTA_MARKER)
   const textContent = hasCTA ? content.replace(CTA_MARKER, '').trimEnd() : content
 
@@ -239,7 +273,7 @@ function MessageBubble({ role, content, modeColor, isTyping, timestamp }: { role
               >
                 {textContent}
               </ReactMarkdown>
-              {hasCTA && <OpenDockButton />}
+              {hasCTA && <PostPlanCTA />}
               {isTyping && (
                 <motion.span
                   style={{ color: modeColor, fontWeight: 300, marginLeft: '1px' }}
@@ -653,7 +687,7 @@ export default function ChatInterface() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: trimmed,
-          session_id: sessionId,
+          session_id: null,
           user_id: user?.id ?? null,
           sliders,
         }),
@@ -679,9 +713,10 @@ export default function ChatInterface() {
       }
 
       setSessionId(data.trip_plan_id)
+      setMode('plan')
 
       await new Promise(r => setTimeout(r, 1500))
-      const ctaText = "Your trip plan is ready! Want me to open the visual planner? You'll get an interactive timeline, map, weather forecasts, and budget breakdown.\n\n[CTA:OPEN_DOCK]"
+      const ctaText = "Your trip plan is ready! Want me to open the visual planner? You'll get an interactive timeline, map, weather forecasts, and budget breakdown.\n\n[CTA:POST_PLAN]"
       const ctaId = crypto.randomUUID()
       useChatStore.getState().messages.push({ id: ctaId, role: 'assistant', content: '', timestamp: new Date() })
       useChatStore.setState({ messages: [...useChatStore.getState().messages] })
