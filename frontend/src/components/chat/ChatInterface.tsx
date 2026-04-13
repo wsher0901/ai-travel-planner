@@ -6,6 +6,7 @@ import { ArrowUp, Compass, SlidersHorizontal } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import SliderPanel from './SliderPanel'
 import { useChatStore, type ChatMode } from '@/store/chatStore'
+import { useTripStore } from '@/store/tripStore'
 import { useUIStore } from '@/store/uiStore'
 import { createClient } from '@/lib/supabase'
 
@@ -183,6 +184,7 @@ function PostPlanCTA() {
           setMode('zero-shot')
           clearMessages()
           setSessionId(null)
+          useTripStore.getState().clearTrip()
         }}
         style={{
           ...btnBase,
@@ -714,6 +716,21 @@ export default function ChatInterface() {
 
       setSessionId(data.trip_plan_id)
       setMode('plan')
+
+      useTripStore.getState().setTripPlan({
+        id: data.trip_plan_id,
+        destination: data.destination,
+        origin_city: data.origin_city || null,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        budget_range: data.budget_range || '',
+        destination_timezone: data.destination_timezone || null,
+        destination_latitude: data.destination_latitude || null,
+        destination_longitude: data.destination_longitude || null,
+        number_of_travelers: data.number_of_travelers || 1,
+        user_timezone: data.user_timezone || null,
+      })
+      useTripStore.getState().setPlanItems(data.items || [])
 
       await new Promise(r => setTimeout(r, 1500))
       const ctaText = "Your trip plan is ready! Want me to open the visual planner? You'll get an interactive timeline, map, weather forecasts, and budget breakdown.\n\n[CTA:POST_PLAN]"

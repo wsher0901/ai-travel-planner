@@ -17,6 +17,9 @@ class PlanRequest(BaseModel):
     session_id: Optional[str] = None
     user_id: Optional[str] = None
     sliders: Optional[dict] = None
+    user_timezone: Optional[str] = None
+    origin_city: Optional[str] = None
+    number_of_travelers: Optional[int] = 1
 
 
 @router.post("/generate")
@@ -41,6 +44,12 @@ async def generate_plan(body: PlanRequest):
             "plan_json": plan,
             "status": "generated",
             "version": 1,
+            "user_timezone": body.user_timezone,
+            "destination_timezone": plan.get("destination_timezone"),
+            "origin_city": plan.get("origin_city"),
+            "destination_latitude": plan.get("destination_latitude"),
+            "destination_longitude": plan.get("destination_longitude"),
+            "number_of_travelers": body.number_of_travelers,
         })
         .execute()
     )
@@ -59,7 +68,7 @@ async def generate_plan(body: PlanRequest):
         }).execute()
 
     # Insert each plan item
-    plan_items = plan.get("plan_items", [])
+    plan_items = plan.get("items", [])
     if plan_items:
         rows = [
             {
@@ -76,9 +85,21 @@ async def generate_plan(body: PlanRequest):
                 "duration_minutes": item.get("duration_minutes"),
                 "notes": item.get("notes"),
                 "sort_order": item.get("sort_order"),
+                "date": item.get("date"),
+                "start_time": item.get("start_time"),
+                "end_time": item.get("end_time"),
+                "address": item.get("address", ""),
+                "currency": item.get("currency", "USD"),
+                "priority": item.get("priority", "nice_to_have"),
+                "timezone": item.get("timezone"),
             }
             for item in plan_items
         ]
         supabase.table("plan_items").insert(rows).execute()
 
-    return {"trip_plan_id": trip_plan_id, **plan}
+    return {
+        "trip_plan_id": trip_plan_id,
+        "user_timezone": body.user_timezone,
+        "number_of_travelers": body.number_of_travelers,
+        **plan,
+    }

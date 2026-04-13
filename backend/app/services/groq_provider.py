@@ -82,33 +82,57 @@ class GroqProvider(TravelAIProvider):
         system_prompt = (
             "You are Roam, an expert AI travel planner. The user will describe when "
             "they are free and their preferences. You must respond with ONLY a valid "
-            "JSON object — no explanation, no markdown, no code blocks, just raw JSON. "
+            "JSON object — no explanation, no markdown, no code blocks, just raw JSON.\n\n"
             "The JSON must follow this exact structure:\n"
             "{\n"
-            '  "destination": "City, Country",\n'
+            '  "destination": "London, United Kingdom",\n'
+            '  "origin_city": "New York, NY",\n'
+            '  "destination_timezone": "Europe/London",\n'
+            '  "destination_latitude": 51.5074,\n'
+            '  "destination_longitude": -0.1278,\n'
             '  "start_date": "YYYY-MM-DD",\n'
             '  "end_date": "YYYY-MM-DD",\n'
-            '  "budget_range": "budget|mid-range|luxury",\n'
+            '  "budget_range": "$1500-2000",\n'
             '  "summary": "2-3 sentence overview of the trip",\n'
-            '  "plan_items": [\n'
+            '  "items": [\n'
             "    {\n"
             '      "day_number": 1,\n'
-            '      "time_slot": "morning|afternoon|evening",\n'
-            '      "activity_type": "transport|accommodation|food|activity|sightseeing",\n'
+            '      "date": "YYYY-MM-DD",\n'
+            '      "sort_order": 1,\n'
+            '      "time_slot": "morning",\n'
+            '      "start_time": "09:00",\n'
+            '      "end_time": "11:00",\n'
+            '      "activity_type": "sightseeing",\n'
             '      "title": "Activity title",\n'
             '      "description": "2-3 sentence description",\n'
             '      "location_name": "Specific place name",\n'
-            '      "latitude": 0.0,\n'
-            '      "longitude": 0.0,\n'
-            '      "cost_estimate": 0,\n'
-            '      "duration_minutes": 60,\n'
+            '      "address": "Full street address including city and postal code",\n'
+            '      "latitude": 51.5014,\n'
+            '      "longitude": -0.1419,\n'
+            '      "cost_estimate": 30.00,\n'
+            '      "currency": "GBP",\n'
+            '      "duration_minutes": 120,\n'
+            '      "priority": "must_do",\n'
             '      "notes": "Practical tip or note",\n'
-            '      "sort_order": 1\n'
+            '      "timezone": "Europe/London"\n'
             "    }\n"
             "  ]\n"
-            "}\n"
-            "Generate at least 3 days with 3 time slots per day (morning, afternoon, "
-            "evening). Use real coordinates for all locations."
+            "}\n\n"
+            "STRICT RULES — violating any of these will break the application:\n"
+            "- origin_city is where the traveler is departing from, extracted from their message. "
+            "If not mentioned, set to null\n"
+            "- activity_type MUST be exactly one of: sightseeing, food, transport, "
+            "accommodation, shopping, entertainment, outdoor, wellness, nightlife, culture\n"
+            "- priority MUST be exactly one of: must_do, nice_to_have, flexible\n"
+            "- start_time and end_time MUST be 24-hour format strings e.g. \"09:00\", \"21:30\"\n"
+            "- date MUST be \"YYYY-MM-DD\" format matching the day_number offset from start_date\n"
+            "- currency MUST be an ISO 4217 code e.g. USD, GBP, JPY, EUR, AUD\n"
+            "- destination_timezone and timezone MUST be IANA format e.g. \"Asia/Tokyo\", \"Europe/London\"\n"
+            "- latitude and longitude MUST be floats (not strings)\n"
+            "- budget_range MUST be a dollar range string e.g. \"$1500-2000\"\n"
+            "- Items must have realistic times that do not overlap; include travel time between locations\n"
+            "- Generate at least 3 days with 3 items per day (morning, afternoon, evening)\n"
+            "- Use real coordinates and real full addresses for all locations"
         )
         system_prompt += _build_preferences(context.get("sliders"))
 
