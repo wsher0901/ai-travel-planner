@@ -362,7 +362,7 @@ export default function TimelinePanel() {
           >
             {compactDateLabel}
           </span>
-          <div style={{ marginLeft: 24 }}>
+          <div style={{ marginLeft: 36 }}>
             <DayStrip
               tripStartDate={startDate}
               tripEndDate={endDate}
@@ -419,7 +419,11 @@ export default function TimelinePanel() {
         <DayOverviewBar
           items={dayItems}
           hoveredActivityId={hoveredActivityId}
-          onHoverActivity={(id) => setHoveredActivityId(id)}
+          onHoverActivity={(id) => {
+            const t = performance.now().toFixed(1);
+            console.log(`[STUTTER ${t}] TimelinePanel received onHoverActivity from overview → setHoveredActivityId(${id})`);
+            setHoveredActivityId(id);
+          }}
         />
       </div>
 
@@ -465,7 +469,7 @@ export default function TimelinePanel() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
-                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
               >
                 {dayItems.length === 0 ? (
                   <div
@@ -506,7 +510,11 @@ export default function TimelinePanel() {
                             index={idx}
                             activityId={activityId}
                             isHighlighted={hoveredActivityId === activityId}
-                            onHover={(id) => setHoveredActivityId(id)}
+                            onHover={(id) => {
+                              const t = performance.now().toFixed(1);
+                              console.log(`[STUTTER ${t}] TimelinePanel received onHover from card → setHoveredActivityId(${id})`);
+                              setHoveredActivityId(id);
+                            }}
                           />
                         </motion.div>
                         {travel && TravelIcon && (
@@ -522,6 +530,7 @@ export default function TimelinePanel() {
                                 justifyContent: 'center',
                                 padding: '4px 0',
                                 gap: 8,
+                                pointerEvents: 'none',
                               }}
                             >
                               <div
@@ -564,7 +573,7 @@ export default function TimelinePanel() {
                             </div>
                           </motion.div>
                         )}
-                        <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
                           <button
                             onMouseEnter={() => setHoveredAddPos(item.sort_order)}
                             onMouseLeave={() => setHoveredAddPos(null)}
@@ -580,8 +589,7 @@ export default function TimelinePanel() {
                               justifyContent: 'center',
                               cursor: 'pointer',
                               color: hoveredAddPos === item.sort_order ? 'rgba(6,182,212,0.8)' : 'rgba(6,182,212,0.4)',
-                              transition: 'all 200ms ease',
-                              transform: hoveredAddPos === item.sort_order ? 'scale(1.1)' : 'none',
+                              transition: 'background-color 200ms ease, border-color 200ms ease, color 200ms ease',
                             }}
                           >
                             <Plus size={14} />

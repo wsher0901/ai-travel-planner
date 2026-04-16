@@ -2,20 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { type PlanItem } from '@/store/tripStore';
-
-const ACTIVITY_COLORS: Record<string, string> = {
-  sightseeing:   '#06b6d4',
-  food:          '#fb923c',
-  activity:      '#a78bfa',
-  transport:     '#3b82f6',
-  accommodation: '#818cf8',
-  shopping:      '#ec4899',
-  entertainment: '#ef4444',
-  outdoor:       '#059669',
-  wellness:      '#14b8a6',
-  nightlife:     '#7c3aed',
-  culture:       '#f97316',
-};
+import { getActivityColor } from '@/lib/activityColors';
 
 // Full 24-hour day
 const DAY_MINUTES = 1440;
@@ -159,7 +146,7 @@ export default function DayOverviewBar({ items, hoveredActivityId, onHoverActivi
           const endMins        = item.end_time ? timeToMinutes(item.end_time) : startMins + durMins;
           const left           = (startMins / DAY_MINUTES) * 100;
           const width          = Math.max((durMins / DAY_MINUTES) * 100, 0.5);
-          const hexColor       = ACTIVITY_COLORS[item.activity_type];
+          const hexColor       = getActivityColor(item.activity_type);
           const blockKey       = item.id ? String(item.id) : `${item.day_number}-${item.sort_order}`;
           const isDirectHover  = hoveredBlock === blockKey;
           const isExternalHover = hoveredActivityId === blockKey;
@@ -168,13 +155,11 @@ export default function DayOverviewBar({ items, hoveredActivityId, onHoverActivi
 
           void idx;
 
-          const rgb = hexColor ? hexToRgbStr(hexColor) : null;
+          const rgb = hexToRgbStr(hexColor);
 
-          const normalBorder = rgb ? `2px solid rgba(${rgb},0.7)` : '2px solid rgba(255,255,255,0.2)';
-          const hoverBorder  = rgb ? `2px solid rgba(${rgb},1)`   : '2px solid rgba(255,255,255,0.5)';
-          const hoverShadow  = rgb
-            ? `inset 0 1px 0 rgba(255,255,255,0.1), 0 0 14px rgba(${rgb},0.25)`
-            : 'inset 0 1px 0 rgba(255,255,255,0.1), 0 0 14px rgba(255,255,255,0.1)';
+          const normalBorder = `2px solid rgba(${rgb},0.7)`;
+          const hoverBorder  = `2px solid rgba(${rgb},1)`;
+          const hoverShadow  = `inset 0 1px 0 rgba(255,255,255,0.1), 0 0 14px rgba(${rgb},0.25)`;
 
           const containerWidth  = containerRef.current?.offsetWidth ?? 400;
           const blockPixelWidth = (width / 100) * containerWidth;

@@ -316,7 +316,7 @@ function TripRadarInner({ planItems, tripStartDate, tripEndDate }: TripRadarProp
         gap: 0,
         padding: 0,
         paddingTop: 0,
-        marginTop: 0,
+        marginTop: -12,
       }}
     >
       {/* Trip score */}
@@ -336,7 +336,7 @@ function TripRadarInner({ planItems, tripStartDate, tripEndDate }: TripRadarProp
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <span
             style={{
-              fontSize: 48,
+              fontSize: 44,
               fontWeight: 700,
               color: 'rgb(245,158,11)',
               fontFamily: 'var(--font-sora)',
@@ -367,14 +367,14 @@ function TripRadarInner({ planItems, tripStartDate, tripEndDate }: TripRadarProp
       </div>
 
       {/* Radar chart */}
-      <ResponsiveContainer width="100%" height={480}>
-        <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="90%">
+      <ResponsiveContainer width="100%" height={456}>
+        <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="86%">
           <Tooltip
             cursor={false}
             content={<CustomTooltip />}
           />
           <PolarGrid
-            stroke="rgba(6,182,212,0.1)"
+            stroke="rgba(6,182,212,0.2)"
             radialLines={false}
           />
           <PolarAngleAxis
@@ -390,8 +390,8 @@ function TripRadarInner({ planItems, tripStartDate, tripEndDate }: TripRadarProp
                     x={x}
                     y={y}
                     textAnchor="middle"
-                    fontSize={12}
-                    fill="rgba(255,255,255,0.5)"
+                    fontSize={11}
+                    fill="rgba(255,255,255,0.65)"
                     fontFamily="var(--font-sora)"
                     fontWeight={500}
                   >
@@ -401,7 +401,7 @@ function TripRadarInner({ planItems, tripStartDate, tripEndDate }: TripRadarProp
                     x={x}
                     y={y + 15}
                     textAnchor="middle"
-                    fontSize={14}
+                    fontSize={13}
                     fill="rgb(245,158,11)"
                     fontFamily="var(--font-sora)"
                     fontWeight={700}
@@ -427,12 +427,12 @@ function TripRadarInner({ planItems, tripStartDate, tripEndDate }: TripRadarProp
           />
           <Radar
             dataKey="score"
-            fill="rgba(245,158,11,0.12)"
+            fill="rgba(245,158,11,0.18)"
             fillOpacity={1}
-            stroke="rgba(245,158,11,0.6)"
-            strokeWidth={2}
-            dot={{ r: 3, fill: 'rgb(245,158,11)', strokeWidth: 0 }}
-            activeDot={{ r: 5, fill: 'rgb(245,158,11)', stroke: 'rgba(245,158,11,0.3)', strokeWidth: 3 }}
+            stroke="rgba(245,158,11,0.8)"
+            strokeWidth={2.5}
+            dot={{ r: 4, fill: 'rgb(245,158,11)', strokeWidth: 0 }}
+            activeDot={{ r: 6, fill: 'rgb(245,158,11)', stroke: 'rgba(245,158,11,0.3)', strokeWidth: 3 }}
           />
         </RadarChart>
       </ResponsiveContainer>

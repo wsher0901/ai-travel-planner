@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { getActivityColor } from "@/lib/activityColors";
 
 interface PlanItem {
   date?: string | null;
@@ -15,14 +16,6 @@ interface DayStripProps {
   onSelectDate: (date: string) => void;
   planItems: PlanItem[];
 }
-
-const DOT_COLORS: Record<string, string> = {
-  sightseeing: "#06b6d4",
-  food: "#fb923c",
-  activity: "#a78bfa",
-  transport: "#3b82f6",
-  accommodation: "#818cf8",
-};
 
 const DAY_ABBREVS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
@@ -95,9 +88,9 @@ export default function DayStrip({
             key={isoDate}
             onClick={() => onSelectDate(isoDate)}
             style={{
-              width: "56px",
-              minWidth: "56px",
-              height: "50px",
+              width: "60px",
+              minWidth: "60px",
+              height: "54px",
               borderRadius: "12px",
               display: "flex",
               flexDirection: "column",
@@ -155,6 +148,7 @@ export default function DayStrip({
                   fontFamily: "var(--font-sora)",
                   letterSpacing: "0.05em",
                   textTransform: "uppercase",
+                  marginBottom: "1px",
                   color: isSelected
                     ? "rgba(0,0,0,0.5)"
                     : "rgba(255,255,255,0.35)",
@@ -165,7 +159,7 @@ export default function DayStrip({
 
               <span
                 style={{
-                  fontSize: isSelected ? "17px" : "16px",
+                  fontSize: isSelected ? "18px" : "16px",
                   fontWeight: isSelected ? 700 : 600,
                   fontFamily: "var(--font-sora)",
                   marginTop: "1px",
@@ -183,23 +177,18 @@ export default function DayStrip({
                     marginTop: "3px",
                   }}
                 >
-                  {dots.map((item, i) => {
-                    const type = item.activity_type?.toLowerCase() ?? "";
-                    const color = isSelected
-                      ? "rgba(0,0,0,0.3)"
-                      : DOT_COLORS[type] ?? "rgba(255,255,255,0.3)";
-                    return (
-                      <div
-                        key={i}
-                        style={{
-                          width: "3px",
-                          height: "3px",
-                          borderRadius: "50%",
-                          backgroundColor: color,
-                        }}
-                      />
-                    );
-                  })}
+                  {dots.map((item, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: "3px",
+                        height: "3px",
+                        borderRadius: "50%",
+                        backgroundColor: getActivityColor(item.activity_type ?? ""),
+                        boxShadow: "0 0 0 1px rgba(0,0,0,0.5)",
+                      }}
+                    />
+                  ))}
                 </div>
               )}
             </div>
