@@ -1,7 +1,7 @@
 'use client'
 
 import { Slider } from 'radix-ui'
-import { useChatStore, type SliderKey, type ChatMode } from '@/store/chatStore'
+import { useChatStore, type SliderKey } from '@/store/chatStore'
 
 const SLIDER_CONFIG: { key: SliderKey; label: string; labels: [string, string, string, string, string] }[] = [
   { key: 'budget',         label: 'Budget',   labels: ['Under $50/day', '$50–100/day', '$100–200/day', '$200–400/day', '$400+/day'] },
@@ -11,11 +11,7 @@ const SLIDER_CONFIG: { key: SliderKey; label: string; labels: [string, string, s
   { key: 'adventure_level',label: 'Vibe',     labels: ['Pure relaxation', 'Mostly chill', 'Mix of both', 'Mostly active', 'Full adventure'] },
 ]
 
-const MODE_COLOR: Record<ChatMode, string> = {
-  'zero-shot': '#f59e0b',
-  plan:        '#3b82f6',
-  ask:         '#10b981',
-}
+const ACCENT_COLOR = '#f59e0b'
 
 function valueLabel(value: number, labels: [string, string, string, string, string]) {
   return labels[Math.min(Math.max(Math.round(value), 0), 4)]
@@ -24,8 +20,7 @@ function valueLabel(value: number, labels: [string, string, string, string, stri
 export default function SliderPanel() {
   const sliders = useChatStore((s) => s.sliders)
   const setSlider = useChatStore((s) => s.setSlider)
-  const mode = useChatStore((s) => s.mode)
-  const accentColor = MODE_COLOR[mode]
+  const accentColor = ACCENT_COLOR
 
   return (
     <div

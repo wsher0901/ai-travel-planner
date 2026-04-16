@@ -38,7 +38,7 @@ export default async function PlanPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0a0a0a]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#0a0a0a]">
       {/* Nav bar */}
       <nav
         style={{

@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 
 export type MessageRole = 'user' | 'assistant'
-export type ChatMode = 'zero-shot' | 'plan' | 'ask'
 
 export interface Message {
   id: string
@@ -22,14 +21,14 @@ export type SliderKey = keyof Sliders
 
 interface ChatState {
   messages: Message[]
-  mode: ChatMode
+  zeroShotActive: boolean
   isLoading: boolean
   sessionId: string | null
   sliders: Sliders
 
   addMessage: (role: MessageRole, content: string) => void
   updateMessage: (id: string, content: string) => void
-  setMode: (mode: ChatMode) => void
+  setZeroShotActive: (active: boolean) => void
   setLoading: (loading: boolean) => void
   setSessionId: (id: string | null) => void
   setSlider: (key: SliderKey, value: number) => void
@@ -38,7 +37,7 @@ interface ChatState {
 
 export const useChatStore = create<ChatState>((set) => ({
   messages: [],
-  mode: 'plan',
+  zeroShotActive: false,
   isLoading: false,
   sessionId: null,
 
@@ -70,7 +69,7 @@ export const useChatStore = create<ChatState>((set) => ({
     adventure_level: 50,
   },
 
-  setMode: (mode) => set({ mode }),
+  setZeroShotActive: (zeroShotActive) => set({ zeroShotActive }),
   setLoading: (isLoading) => set({ isLoading }),
   setSessionId: (sessionId) => set({ sessionId }),
   setSlider: (key, value) =>

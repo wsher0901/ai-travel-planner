@@ -60,7 +60,7 @@ export default function PlanLayout({ chatPanel, dockPanel }: PlanLayoutProps) {
       <AnimatePresence>
         {layoutMode === 'split' && (
           <motion.div
-            className="relative flex-1 min-w-0"
+            className="relative flex-1 min-w-0 h-full overflow-hidden"
             initial={{ opacity: 0, x: 40 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 40 }}
@@ -68,7 +68,8 @@ export default function PlanLayout({ chatPanel, dockPanel }: PlanLayoutProps) {
           >
             <button
               onClick={() => setLayoutMode('discovery')}
-              className={`absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 ${BUTTON_CLASS}`}
+              className={`absolute top-1/2 -translate-y-1/2 z-10 ${BUTTON_CLASS}`}
+              style={{ left: 2 }}
             >
               <PanelRightClose size={14} />
             </button>

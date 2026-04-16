@@ -2,129 +2,20 @@
 
 import React, { useEffect, useRef, useState, useCallback, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUp, Compass, SlidersHorizontal } from 'lucide-react'
+import { ArrowUp, ArrowRight, Compass, Plus, X, Sparkles, SlidersHorizontal, MessageCircle, ClipboardCheck } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import SliderPanel from './SliderPanel'
-import { useChatStore, type ChatMode } from '@/store/chatStore'
+import { useChatStore } from '@/store/chatStore'
 import { useTripStore } from '@/store/tripStore'
 import { useUIStore } from '@/store/uiStore'
 import { createClient } from '@/lib/supabase'
 
-// ── Mode config ────────────────────────────────────────────────────────────
-const MODE_CONFIG: Record<ChatMode, { label: string; description: string; placeholder: string; emptyHeading: string; emptyHint: string }> = {
-  'zero-shot': {
-    label: 'Zero-Shot',
-    description: 'Get a full plan instantly',
-    placeholder: "When are you free? Where are you flying from?",
-    emptyHeading: 'Zero-Shot Mode',
-    emptyHint: "Tell me your dates, budget, and vibe — I'll handle the rest.",
-  },
-  plan: {
-    label: 'Plan',
-    description: 'Build your trip together',
-    placeholder: "Let's build your trip together...",
-    emptyHeading: 'Plan Mode',
-    emptyHint: "Let's build your perfect trip step by step.",
-  },
-  ask: {
-    label: 'Ask',
-    description: 'Ask anything about destinations',
-    placeholder: 'Ask me anything about any destination...',
-    emptyHeading: 'Ask Mode',
-    emptyHint: 'Ask me anything — weather, costs, visas, hidden gems.',
-  },
-}
-
-// ── Mode colors ────────────────────────────────────────────────────────────
-const MODE_COLORS: Record<ChatMode, { color: string; glow: string; headlineColor: string; chipBorder: string }> = {
-  'zero-shot': { color: '#f59e0b', glow: 'radial-gradient(ellipse at 50% 60%, rgba(245,158,11,0.12) 0%, rgba(245,158,11,0.03) 40%, transparent 70%)', headlineColor: '#fbbf24', chipBorder: 'rgba(245,158,11,0.35)' },
-  plan:        { color: '#3b82f6', glow: 'radial-gradient(ellipse at 50% 60%, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.03) 40%, transparent 70%)',  headlineColor: '#60a5fa', chipBorder: 'rgba(59,130,246,0.35)' },
-  ask:         { color: '#10b981', glow: 'radial-gradient(ellipse at 50% 60%, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0.03) 40%, transparent 70%)', headlineColor: '#34d399', chipBorder: 'rgba(16,185,129,0.35)' },
-}
-
-const MODES_ORDER: ChatMode[] = ['zero-shot', 'plan', 'ask']
-
-// ── Mode selector ──────────────────────────────────────────────────────────
-const MODE_DESCRIPTIONS: Record<ChatMode, string> = {
-  'zero-shot': 'Get a complete trip plan instantly',
-  plan: 'Build your trip conversationally',
-  ask: 'Ask anything about destinations',
-}
-
-function ModeSelector({ onSelect }: { onSelect: (newMode: ChatMode) => void }) {
-  const mode = useChatStore((s) => s.mode)
-  const modes = Object.keys(MODE_CONFIG) as ChatMode[]
-
-  return (
-    <div className="shrink-0" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
-        <div
-          style={{
-            display: 'inline-flex',
-            backgroundColor: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '10px',
-            padding: '3px',
-            gap: '2px',
-            position: 'relative',
-          }}
-        >
-          {modes.map((key) => {
-            const active = mode === key
-            return (
-              <button
-                key={key}
-                onClick={() => onSelect(key)}
-                style={{
-                  position: 'relative',
-                  zIndex: 1,
-                  padding: '5px 18px',
-                  fontSize: '13px',
-                  fontFamily: 'var(--font-sora)',
-                  fontWeight: 500,
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  color: active ? MODE_COLORS[key].color : 'rgba(255,255,255,0.35)',
-                  transition: 'color 0.2s',
-                }}
-              >
-                {active && (
-                  <motion.div
-                    layoutId="segment-bg"
-                    layout
-                    animate={{ backgroundColor: `${MODE_COLORS[mode].color}18` }}
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      zIndex: 0,
-                      borderRadius: '7px',
-                    }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-                  />
-                )}
-                <span style={{ position: 'relative', zIndex: 1 }}>
-                  {MODE_CONFIG[key].label}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-      <p
-        style={{
-          fontSize: '11px',
-          color: 'rgba(255,255,255,0.25)',
-          fontFamily: 'var(--font-sora)',
-          textAlign: 'center',
-          margin: '0 0 4px 0',
-        }}
-      >
-        {MODE_DESCRIPTIONS[mode]}
-      </p>
-    </div>
-  )
+// ── Color config ───────────────────────────────────────────────────────────
+const CHAT_COLOR = {
+  color: '#f59e0b',
+  glow: 'radial-gradient(ellipse at 50% 60%, rgba(245,158,11,0.12) 0%, rgba(245,158,11,0.03) 40%, transparent 70%)',
+  headlineColor: '#fbbf24',
+  chipBorder: 'rgba(245,158,11,0.35)',
 }
 
 // ── Streaming dots ─────────────────────────────────────────────────────────
@@ -145,10 +36,9 @@ function StreamingDots({ modeColor }: { modeColor: string }) {
   )
 }
 
-// ── Message bubble ─────────────────────────────────────────────────────────
+// ── Post-plan CTA ──────────────────────────────────────────────────────────
 function PostPlanCTA() {
   const setLayoutMode = useUIStore((s) => s.setLayoutMode)
-  const setMode = useChatStore((s) => s.setMode)
   const clearMessages = useChatStore((s) => s.clearMessages)
   const setSessionId = useChatStore((s) => s.setSessionId)
 
@@ -181,7 +71,6 @@ function PostPlanCTA() {
       </button>
       <button
         onClick={() => {
-          setMode('zero-shot')
           clearMessages()
           setSessionId(null)
           useTripStore.getState().clearTrip()
@@ -209,6 +98,7 @@ function PostPlanCTA() {
   )
 }
 
+// ── Message bubble ─────────────────────────────────────────────────────────
 function MessageBubble({ role, content, modeColor, isTyping, timestamp }: { role: 'user' | 'assistant'; content: string; modeColor: string; isTyping?: boolean; timestamp: Date }) {
   const isUser = role === 'user'
   const timeStr = timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -313,13 +203,15 @@ function InputPill({
   onKeyDown,
   onSend,
   canSend,
-  mode,
+  zeroShotActive,
+  onToggleZeroShot,
   textareaRef,
   onFocus,
   onBlur,
   isFocused,
   hasText,
   hasStarted,
+  customPlaceholder,
 }: {
   slidersOpen: boolean
   onToggleSliders: () => void
@@ -328,24 +220,43 @@ function InputPill({
   onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void
   onSend: () => void
   canSend: boolean
-  mode: ChatMode
-  textareaRef: React.RefObject<HTMLTextAreaElement>
+  zeroShotActive: boolean
+  onToggleZeroShot: () => void
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>
   onFocus: () => void
   onBlur: () => void
   isFocused: boolean
   hasText: boolean
   hasStarted: boolean
+  customPlaceholder?: string | null
 }) {
-  const [sliderBtnHovered, setSliderBtnHovered] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [])
 
   const borderColor = isFocused && hasText
-    ? `${MODE_COLORS[mode].color}40`
+    ? `${CHAT_COLOR.color}40`
     : isFocused
     ? 'rgba(255,255,255,0.15)'
     : 'rgba(255,255,255,0.1)'
   const boxShadow = isFocused && hasText
-    ? `0 0 12px ${MODE_COLORS[mode].color}15`
+    ? `0 0 12px ${CHAT_COLOR.color}15`
     : 'none'
+
+  const placeholder = customPlaceholder != null
+    ? customPlaceholder
+    : zeroShotActive
+    ? (hasStarted ? 'Dates, travelers, and home city...' : 'How many travelers, when, and where from?')
+    : 'Message Roam...'
 
   return (
     <motion.div
@@ -362,32 +273,95 @@ function InputPill({
         transition: 'border-color 0.2s, box-shadow 0.2s',
       }}
     >
-      <button
-        onClick={onToggleSliders}
-        onMouseEnter={() => setSliderBtnHovered(true)}
-        onMouseLeave={() => setSliderBtnHovered(false)}
-        style={{
-          width: '36px',
-          height: '36px',
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          padding: 0,
-          border: 'none',
-          cursor: 'pointer',
-          background: sliderBtnHovered
-            ? 'rgba(255,255,255,0.08)'
-            : slidersOpen
-            ? 'rgba(255,255,255,0.1)'
-            : 'transparent',
-          color: slidersOpen ? 'white' : 'rgba(255,255,255,0.35)',
-          transition: 'background 0.15s, color 0.15s',
-        }}
-      >
-        <SlidersHorizontal size={18} />
-      </button>
+      {/* + / menu button */}
+      <div ref={menuRef} style={{ position: 'relative', flexShrink: 0 }}>
+        <button
+          onClick={() => setMenuOpen((o) => !o)}
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            border: 'none',
+            cursor: 'pointer',
+            background: menuOpen ? 'rgba(255,255,255,0.1)' : 'transparent',
+            color: menuOpen ? 'white' : 'rgba(255,255,255,0.35)',
+            transition: 'background 0.15s, color 0.15s',
+          }}
+        >
+          <span style={{ display: 'inline-flex', transform: menuOpen ? 'rotate(45deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+            <Plus size={18} />
+          </span>
+        </button>
+
+        {/* Popup menu */}
+        <AnimatePresence>
+          {menuOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.15 }}
+              style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 8px)',
+                left: 0,
+                background: 'rgba(20,20,20,0.95)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '12px',
+                padding: '4px',
+                minWidth: '200px',
+                zIndex: 20,
+                backdropFilter: 'blur(12px)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              }}
+            >
+              <MenuItemButton
+                icon={<Sparkles size={16} color="#f59e0b" />}
+                label="Generate Full Plan"
+                labelColor="rgba(255,255,255,0.8)"
+                onClick={() => { onToggleZeroShot(); setMenuOpen(false) }}
+              />
+              <MenuItemButton
+                icon={<SlidersHorizontal size={16} color="rgba(255,255,255,0.5)" />}
+                label="Preferences"
+                labelColor="rgba(255,255,255,0.7)"
+                onClick={() => { onToggleSliders(); setMenuOpen(false) }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Zero-shot badge */}
+      {zeroShotActive && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 10px',
+            borderRadius: '9999px',
+            background: 'rgba(245,158,11,0.15)',
+            border: '1px solid rgba(245,158,11,0.3)',
+            flexShrink: 0,
+          }}
+        >
+          <Sparkles size={12} color="#f59e0b" />
+          <span style={{ fontSize: '11px', fontWeight: 500, color: '#fbbf24', fontFamily: 'var(--font-sora)' }}>
+            Full Plan
+          </span>
+          <button
+            onClick={onToggleZeroShot}
+            style={{ display: 'inline-flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'rgba(255,255,255,0.4)' }}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       <textarea
         ref={textareaRef}
@@ -396,7 +370,7 @@ function InputPill({
         onKeyDown={onKeyDown}
         onFocus={onFocus}
         onBlur={onBlur}
-        placeholder={hasStarted ? 'Message Roam...' : MODE_CONFIG[mode].placeholder}
+        placeholder={placeholder}
         rows={1}
         style={{
           flex: 1,
@@ -430,7 +404,7 @@ function InputPill({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: MODE_COLORS[mode].color,
+          background: CHAT_COLOR.color,
           border: 'none',
           cursor: canSend ? 'pointer' : 'default',
           opacity: canSend ? 1 : 0.3,
@@ -443,26 +417,7 @@ function InputPill({
   )
 }
 
-// ── Empty state ────────────────────────────────────────────────────────────
-const EMPTY_STATE_CONTENT: Record<ChatMode, { headline: string; subtext: string; chips: string[] }> = {
-  'zero-shot': {
-    headline: 'When are you free?',
-    subtext: "Tell me your dates and home city — I'll build a full trip plan instantly.",
-    chips: ['Free in late April', 'Flying from NYC', 'Budget around $2000'],
-  },
-  plan: {
-    headline: "Let's build your trip.",
-    subtext: "We'll figure out the destination, pace, and details together — one step at a time.",
-    chips: ['I have 10 days in June', 'I want beaches and food', 'Flexible on destination'],
-  },
-  ask: {
-    headline: 'What do you want to know?',
-    subtext: 'Ask me anything — visa rules, best seasons, hidden gems, local tips.',
-    chips: ['Is Japan safe solo?', 'Best time for Patagonia', 'Cheapest cities in Europe'],
-  },
-}
-
-function ChipButton({ label, onClick, chipBorder }: { label: string; onClick: () => void; chipBorder: string }) {
+function MenuItemButton({ icon, label, labelColor, onClick }: { icon: React.ReactNode; label: string; labelColor: string; onClick: () => void }) {
   const [hovered, setHovered] = useState(false)
   return (
     <button
@@ -470,150 +425,293 @@ function ChipButton({ label, onClick, chipBorder }: { label: string; onClick: ()
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        border: `1px solid ${hovered ? chipBorder : 'rgba(255,255,255,0.08)'}`,
-        borderRadius: '9999px',
-        padding: '8px 16px',
-        fontSize: '13px',
-        color: hovered ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.55)',
-        fontFamily: 'var(--font-sora)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        width: '100%',
+        padding: '10px 12px',
+        borderRadius: '8px',
+        border: 'none',
+        background: hovered ? 'rgba(255,255,255,0.06)' : 'transparent',
         cursor: 'pointer',
-        transition: 'border-color 0.15s, color 0.15s',
-        background: 'rgba(255,255,255,0.05)',
+        transition: 'background 0.15s',
       }}
     >
-      {label}
+      {icon}
+      <span style={{ fontSize: '13px', fontFamily: 'var(--font-sora)', color: labelColor }}>
+        {label}
+      </span>
     </button>
   )
 }
 
-const PARTICLES = [
-  { x: '12%',  y: '18%', duration: 6.2, delay: 0 },
-  { x: '78%',  y: '32%', duration: 4.8, delay: 1.1 },
-  { x: '55%',  y: '72%', duration: 7.0, delay: 0.6 },
-  { x: '28%',  y: '61%', duration: 5.4, delay: 2.3 },
-  { x: '88%',  y: '80%', duration: 6.6, delay: 1.7 },
-]
-
+// ── Empty state ────────────────────────────────────────────────────────────
 function EmptyState({
-  mode,
-  onChipClick,
-  modeColor,
-  headlineColor,
-  chipBorder,
-  hasStarted,
-  children,
+  onCardClick,
 }: {
-  mode: ChatMode
-  onChipClick: (text: string) => void
-  modeColor: string
-  headlineColor: string
-  chipBorder: string
-  hasStarted: boolean
-  children?: React.ReactNode
+  onCardClick: (placeholder: string, enableZeroShot: boolean) => void
 }) {
-  const content = EMPTY_STATE_CONTENT[mode]
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+
+  const cards = [
+    {
+      icon: <Sparkles size={20} color="rgb(245,158,11)" />,
+      title: 'Plan a trip for me',
+      subtitle: "Share your dates and we'll handle everything",
+      placeholder: 'Tell me your dates, budget, and any preferences...',
+      enableZeroShot: true,
+      isPrimary: true,
+      borderGradient: 'linear-gradient(135deg, rgba(245,158,11,0.35) 0%, rgba(245,158,11,0.08) 50%, rgba(245,158,11,0.2) 100%)',
+      borderGradientHover: 'linear-gradient(135deg, rgba(245,158,11,0.5) 0%, rgba(245,158,11,0.15) 50%, rgba(245,158,11,0.35) 100%)',
+      bottomLineGradient: 'linear-gradient(90deg, transparent 0%, rgba(245,158,11,0.5) 50%, transparent 100%)',
+      hoverShadow: '0 8px 40px rgba(245,158,11,0.15), 0 2px 8px rgba(245,158,11,0.1)',
+      iconGlow: 'drop-shadow(0 0 6px rgba(245,158,11,0.4))',
+      iconBgGlow: 'radial-gradient(circle, rgba(245,158,11,0.2) 0%, transparent 70%)',
+    },
+    {
+      icon: <MessageCircle size={20} color="rgba(6,182,212,0.7)" />,
+      title: 'Help me figure it out',
+      subtitle: "Not sure yet? Let's explore ideas together",
+      placeholder: 'What kind of trip are you dreaming about?',
+      enableZeroShot: false,
+      isPrimary: false,
+      borderGradient: 'linear-gradient(135deg, rgba(6,182,212,0.25) 0%, rgba(6,182,212,0.05) 50%, rgba(6,182,212,0.15) 100%)',
+      borderGradientHover: 'linear-gradient(135deg, rgba(6,182,212,0.5) 0%, rgba(6,182,212,0.15) 50%, rgba(6,182,212,0.35) 100%)',
+      bottomLineGradient: 'linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.5) 50%, transparent 100%)',
+      hoverShadow: '0 8px 40px rgba(6,182,212,0.15), 0 2px 8px rgba(6,182,212,0.1)',
+      iconGlow: 'drop-shadow(0 0 6px rgba(6,182,212,0.4))',
+      iconBgGlow: 'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
+    },
+    {
+      icon: <ClipboardCheck size={20} color="rgba(168,139,250,0.7)" />,
+      title: 'Improve my existing plan',
+      subtitle: "We'll grade it and suggest upgrades",
+      placeholder: 'Describe or paste your existing plan...',
+      enableZeroShot: false,
+      isPrimary: false,
+      borderGradient: 'linear-gradient(135deg, rgba(168,139,250,0.25) 0%, rgba(168,139,250,0.05) 50%, rgba(168,139,250,0.15) 100%)',
+      borderGradientHover: 'linear-gradient(135deg, rgba(168,139,250,0.5) 0%, rgba(168,139,250,0.15) 50%, rgba(168,139,250,0.35) 100%)',
+      bottomLineGradient: 'linear-gradient(90deg, transparent 0%, rgba(168,139,250,0.5) 50%, transparent 100%)',
+      hoverShadow: '0 8px 40px rgba(168,139,250,0.15), 0 2px 8px rgba(168,139,250,0.1)',
+      iconGlow: 'drop-shadow(0 0 6px rgba(168,139,250,0.4))',
+      iconBgGlow: 'radial-gradient(circle, rgba(168,139,250,0.2) 0%, transparent 70%)',
+    },
+  ]
+
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
-        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1,
+        flex: 1,
+        padding: '24px',
+        gap: '20px',
         position: 'relative',
-        gap: '16px',
-        padding: '0 24px',
       }}
     >
-      {/* Ambient particles */}
-      <AnimatePresence>
-        {!hasStarted && (
-          <motion.div
-            key="particles"
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}
-          >
-            {PARTICLES.map((p, i) => (
-              <motion.div
-                key={i}
+      {/* Ambient background glow */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '40%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '600px',
+          height: '400px',
+          background: 'radial-gradient(ellipse at center, rgba(245,158,11,0.06) 0%, rgba(6,182,212,0.03) 40%, transparent 70%)',
+          pointerEvents: 'none',
+          zIndex: 0,
+          filter: 'blur(60px)',
+        }}
+      />
+
+      {/* Heading */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', position: 'relative', zIndex: 1 }}>
+        <div style={{ position: 'relative', display: 'inline-flex', marginBottom: '4px' }}>
+          {/* Compass ambient glow */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: '-12px',
+              background: 'radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%)',
+              borderRadius: '50%',
+              pointerEvents: 'none',
+              filter: 'blur(8px)',
+            }}
+          />
+          <Compass size={36} color="rgba(245,158,11,0.6)" />
+        </div>
+        <p style={{
+          fontSize: '28px',
+          fontWeight: 700,
+          fontFamily: 'var(--font-sora)',
+          textAlign: 'center',
+          margin: 0,
+          letterSpacing: '-0.01em',
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(245,158,11,0.8) 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+        }}>
+          Where to next?
+        </p>
+      </div>
+
+      {/* Cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', maxWidth: '400px', position: 'relative', zIndex: 1 }}>
+        {cards.map((card, index) => {
+          const isHovered = hoveredIdx === index
+          const outerPadding = card.isPrimary ? '2px' : '1.5px'
+          const innerPadding = card.isPrimary ? '20px 24px' : '18px 22px'
+          const titleSize = card.isPrimary ? '16px' : '15px'
+          const cardOpacity = !card.isPrimary && !isHovered ? 0.85 : 1
+          return (
+            <motion.div
+              key={card.title}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.08 }}
+              onClick={() => onCardClick(card.placeholder, card.enableZeroShot)}
+              onMouseEnter={() => setHoveredIdx(index)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              style={{ opacity: cardOpacity, transition: 'opacity 300ms ease' }}
+            >
+              {/* Outer div — visible gradient border */}
+              <div
                 style={{
-                  position: 'absolute',
-                  left: p.x,
-                  top: p.y,
-                  width: '3px',
-                  height: '3px',
-                  borderRadius: '50%',
-                  background: modeColor,
-                  opacity: 0.1,
+                  position: 'relative',
+                  padding: outerPadding,
+                  borderRadius: '20px',
+                  cursor: 'pointer',
+                  overflow: 'hidden',
+                  transition: 'all 400ms ease',
+                  transform: isHovered ? 'translateY(-3px)' : 'translateY(0)',
+                  boxShadow: isHovered ? card.hoverShadow : 'none',
+                  background: isHovered ? card.borderGradientHover : card.borderGradient,
                 }}
-                animate={{ y: [0, -18, 0], opacity: [0.1, 0.2, 0.1] }}
-                transition={{ duration: p.duration, repeat: Infinity, delay: p.delay, ease: 'easeInOut' }}
-              />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+              >
+                {/* Inner div — frosted glass surface */}
+                <div
+                  style={{
+                    position: 'relative',
+                    zIndex: 10,
+                    backgroundColor: 'rgba(12,15,22,0.75)',
+                    backdropFilter: 'blur(20px) saturate(1.2)',
+                    WebkitBackdropFilter: 'blur(20px) saturate(1.2)',
+                    borderRadius: '19px',
+                    padding: innerPadding,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '14px',
+                    overflow: 'hidden',
+                    boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.08), inset 0 -1px 1px rgba(0,0,0,0.2), 0 0 0 0.5px rgba(255,255,255,0.05)',
+                  }}
+                >
+                  {/* Glass light-from-above overlay */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: '50%',
+                      background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%)',
+                      borderRadius: '19px 19px 0 0',
+                      pointerEvents: 'none',
+                      zIndex: 0,
+                    }}
+                  />
 
-      {/* Headline, subtext, chips */}
-      <AnimatePresence>
-        {!hasStarted && (
-          <motion.div
-            key="content"
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            style={{ position: 'absolute', top: '40%', transform: 'translateY(-50%)', left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}
-          >
-            <Compass
-              size={28}
-              color={modeColor}
-              style={{ filter: `drop-shadow(0 0 12px ${modeColor}66)` }}
-            />
-            <p
-              style={{
-                fontFamily: 'var(--font-sora)',
-                fontSize: '42px',
-                fontWeight: 700,
-                color: headlineColor,
-                textAlign: 'center',
-                letterSpacing: '-0.02em',
-                margin: 0,
-              }}
-            >
-              {content.headline}
-            </p>
-            <p
-              style={{
-                fontSize: '16px',
-                color: 'rgba(255,255,255,0.32)',
-                fontFamily: 'var(--font-sora)',
-                textAlign: 'center',
-                maxWidth: '420px',
-              }}
-            >
-              {content.subtext}
-            </p>
-            <div
-              style={{
-                display: 'flex',
-                gap: '10px',
-                flexWrap: 'wrap',
-                justifyContent: 'center',
-                marginTop: '8px',
-              }}
-            >
-              {content.chips.map((chip) => (
-                <ChipButton key={chip} label={chip} onClick={() => onChipClick(chip)} chipBorder={chipBorder} />
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                  {/* Noise texture overlay */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: '19px',
+                      opacity: 0.03,
+                      backgroundImage: "url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIj48ZmlsdGVyIGlkPSJhIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iLjc1IiBzdGl0Y2hUaWxlcz0ic3RpdGNoIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsdGVyPSJ1cmwoI2EpIi8+PC9zdmc+')",
+                      pointerEvents: 'none',
+                      zIndex: 0,
+                    }}
+                  />
 
-      {/* Input pill injected from parent when !hasStarted */}
-      {children}
+                  {/* Icon with radial glow behind */}
+                  <div style={{ flexShrink: 0, marginTop: 2, position: 'relative', zIndex: 1 }}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: '-8px',
+                        borderRadius: '50%',
+                        background: card.iconBgGlow,
+                        filter: 'blur(6px)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                    <div style={{ position: 'relative', transition: 'filter 400ms ease', filter: isHovered ? card.iconGlow : 'none' }}>
+                      {card.icon}
+                    </div>
+                  </div>
+
+                  {/* Text */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', position: 'relative', zIndex: 1, flex: 1 }}>
+                    <span style={{ fontSize: titleSize, fontWeight: 600, color: isHovered ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.85)', fontFamily: 'var(--font-sora)', transition: 'color 300ms ease' }}>
+                      {card.title}
+                    </span>
+                    <span style={{ fontSize: '13px', color: isHovered ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.4)', lineHeight: 1.4, transition: 'color 300ms ease' }}>
+                      {card.subtitle}
+                    </span>
+                  </div>
+
+                  {/* Arrow indicator — primary card only */}
+                  {card.isPrimary && (
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        alignSelf: 'center',
+                        position: 'relative',
+                        zIndex: 1,
+                        transition: 'all 300ms ease',
+                        transform: isHovered ? 'translateX(3px)' : 'translateX(0)',
+                        color: isHovered ? 'rgba(245,158,11,0.8)' : 'rgba(245,158,11,0.4)',
+                        display: 'flex',
+                      }}
+                    >
+                      <ArrowRight size={16} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom light line */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: '32px',
+                    right: '32px',
+                    height: '1.5px',
+                    borderRadius: '1px',
+                    zIndex: 11,
+                    pointerEvents: 'none',
+                    background: card.bottomLineGradient,
+                    opacity: isHovered ? 0.7 : 0.3,
+                    transition: 'opacity 600ms ease',
+                  }}
+                />
+              </div>
+            </motion.div>
+          )
+        })}
+      </div>
+
+      {/* Footer with vertical connector */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 1 }}>
+        <div style={{ width: '1px', height: '16px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '6px' }} />
+        <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)', margin: 0 }}>
+          Or just start typing below
+        </p>
+      </div>
     </div>
   )
 }
@@ -621,12 +719,12 @@ function EmptyState({
 // ── Main component ─────────────────────────────────────────────────────────
 export default function ChatInterface() {
   const messages = useChatStore((s) => s.messages)
-  const mode = useChatStore((s) => s.mode)
+  const zeroShotActive = useChatStore((s) => s.zeroShotActive)
   const isLoading = useChatStore((s) => s.isLoading)
   const sessionId = useChatStore((s) => s.sessionId)
   const addMessage = useChatStore((s) => s.addMessage)
   const updateMessage = useChatStore((s) => s.updateMessage)
-  const setMode = useChatStore((s) => s.setMode)
+  const setZeroShotActive = useChatStore((s) => s.setZeroShotActive)
   const setLoading = useChatStore((s) => s.setLoading)
   const setSessionId = useChatStore((s) => s.setSessionId)
   const sliders = useChatStore((s) => s.sliders)
@@ -635,11 +733,20 @@ export default function ChatInterface() {
   const [streamingId, setStreamingId] = useState<string | null>(null)
   const [slidersOpen, setSlidersOpen] = useState(false)
   const [hasStarted, setHasStarted] = useState(false)
-  const [slideDirection, setSlideDirection] = useState(0)
-  const prevModeIndexRef = useRef<number>(MODES_ORDER.indexOf(mode))
   const [inputFocused, setInputFocused] = useState(false)
+  const [customPlaceholder, setCustomPlaceholder] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleCardClick = useCallback((placeholder: string, enableZeroShot: boolean) => {
+    setCustomPlaceholder(placeholder)
+    if (enableZeroShot) {
+      setZeroShotActive(true)
+    } else {
+      setZeroShotActive(false)
+    }
+    setTimeout(() => textareaRef.current?.focus(), 100)
+  }, [setZeroShotActive])
 
   // Auto-scroll on new messages or streaming updates
   useEffect(() => {
@@ -653,14 +760,6 @@ export default function ChatInterface() {
     ta.style.height = 'auto'
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
   }, [input])
-
-  const handleModeSelect = useCallback((newMode: ChatMode) => {
-    const newIdx = MODES_ORDER.indexOf(newMode)
-    const dir = newIdx > prevModeIndexRef.current ? 1 : -1
-    setSlideDirection(dir)
-    prevModeIndexRef.current = newIdx
-    setMode(newMode)
-  }, [setMode])
 
   // Helper: add a placeholder assistant bubble and return its id
   const addPlaceholder = useCallback(() => {
@@ -715,7 +814,6 @@ export default function ChatInterface() {
       }
 
       setSessionId(data.trip_plan_id)
-      setMode('plan')
 
       useTripStore.getState().setTripPlan({
         id: data.trip_plan_id,
@@ -754,7 +852,7 @@ export default function ChatInterface() {
     }
   }, [sessionId, sliders, addPlaceholder, updateMessage, setSessionId, setLoading])
 
-  // Plan / Ask modes: SSE stream to /chat/stream
+  // Stream to /chat/stream
   const handleStream = useCallback(async (trimmed: string) => {
     const assistantId = addPlaceholder()
 
@@ -762,7 +860,7 @@ export default function ChatInterface() {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed, mode, session_id: sessionId, sliders }),
+        body: JSON.stringify({ message: trimmed, mode: 'plan', session_id: sessionId, sliders }),
       })
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -807,7 +905,7 @@ export default function ChatInterface() {
       setStreamingId(null)
       setLoading(false)
     }
-  }, [mode, sessionId, sliders, addPlaceholder, updateMessage, setLoading])
+  }, [sessionId, sliders, addPlaceholder, updateMessage, setLoading])
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim()
@@ -816,14 +914,16 @@ export default function ChatInterface() {
     setHasStarted(true)
     addMessage('user', trimmed)
     setInput('')
+    setCustomPlaceholder(null)
     setLoading(true)
 
-    if (mode === 'zero-shot') {
+    if (zeroShotActive) {
+      setZeroShotActive(false)
       handleZeroShot(trimmed)
     } else {
       handleStream(trimmed)
     }
-  }, [input, isLoading, mode, addMessage, setLoading, handleZeroShot, handleStream])
+  }, [input, isLoading, zeroShotActive, addMessage, setLoading, setZeroShotActive, handleZeroShot, handleStream])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -842,145 +942,90 @@ export default function ChatInterface() {
     onKeyDown: handleKeyDown,
     onSend: handleSend,
     canSend,
-    mode,
+    zeroShotActive,
+    onToggleZeroShot: () => { const store = useChatStore.getState(); store.setZeroShotActive(!store.zeroShotActive) },
     textareaRef,
     onFocus: () => setInputFocused(true),
     onBlur: () => setInputFocused(false),
     isFocused: inputFocused,
     hasText: input.trim().length > 0,
     hasStarted,
+    customPlaceholder,
   }
 
   return (
     <div style={{ height: 'calc(100vh - 56px)', display: 'flex', flexDirection: 'column', position: 'relative', background: '#080808', overflow: 'hidden' }}>
       {/* Background glow */}
-      <motion.div
-        animate={{ background: MODE_COLORS[mode].glow }}
-        transition={{ duration: 0.5 }}
-        style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }}
+      <div
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0, background: CHAT_COLOR.glow }}
       />
-      {/* Mode selector */}
-      <ModeSelector onSelect={handleModeSelect} />
 
       {/* Message thread */}
       <div style={{ flex: 1, overflow: 'hidden', zIndex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <AnimatePresence mode="wait" custom={slideDirection}>
-          <motion.div
-            key={mode}
-            custom={slideDirection}
-            variants={{
-              enter: (dir: number) => ({ opacity: 0, x: dir * 60 }),
-              center: { opacity: 1, x: 0 },
-              exit: (dir: number) => ({ opacity: 0, x: dir * -60 }),
-            }}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}
-          >
-            {messages.length === 0 ? (
-              <EmptyState
-                mode={mode}
-                onChipClick={setInput}
-                modeColor={MODE_COLORS[mode].color}
-                headlineColor={MODE_COLORS[mode].headlineColor}
-                chipBorder={MODE_COLORS[mode].chipBorder}
-                hasStarted={hasStarted}
-              >
-                {!hasStarted && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '62%',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: '100%',
-                      maxWidth: '720px',
-                      padding: '0 24px',
-                    }}
-                  >
-                    <InputPill {...pillProps} />
-                    <AnimatePresence>
-                      {slidersOpen && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.3 }}
-                          style={{ overflow: 'hidden', paddingTop: '12px' }}
-                        >
-                          <SliderPanel />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )}
-              </EmptyState>
-            ) : (
-              <div
-                className="[&::-webkit-scrollbar]:hidden"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '16px',
-                  overflowY: 'auto',
-                  padding: '24px 24px 160px',
-                  maxWidth: '720px',
-                  margin: '0 auto',
-                  width: '100%',
-                  flex: 1,
-                  scrollbarWidth: 'none',
-                  msOverflowStyle: 'none',
-                }}
-              >
-                {messages.map((msg) => (
-                  <MessageBubble
-                    key={msg.id}
-                    role={msg.role}
-                    content={msg.content}
-                    modeColor={MODE_COLORS[mode].color}
-                    isTyping={msg.id === streamingId}
-                    timestamp={msg.timestamp}
-                  />
-                ))}
-                <div ref={bottomRef} />
-              </div>
-            )}
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', position: 'relative' }}>
+          {messages.length === 0 ? (
+            <EmptyState onCardClick={handleCardClick} />
+          ) : (
+            <div
+              className="[&::-webkit-scrollbar]:hidden"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                overflowY: 'auto',
+                padding: '24px 24px 160px',
+                maxWidth: '720px',
+                margin: '0 auto',
+                width: '100%',
+                flex: 1,
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+              }}
+            >
+              {messages.map((msg) => (
+                <MessageBubble
+                  key={msg.id}
+                  role={msg.role}
+                  content={msg.content}
+                  modeColor={CHAT_COLOR.color}
+                  isTyping={msg.id === streamingId}
+                  timestamp={msg.timestamp}
+                />
+              ))}
+              <div ref={bottomRef} />
+            </div>
+          )}
 
-            {/* Fixed input bar — only when hasStarted */}
-            {hasStarted && (
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  padding: '24px 24px 32px',
-                  background: 'linear-gradient(to top, #080808 70%, transparent)',
-                  zIndex: 10,
-                }}
-              >
-                <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-                  <AnimatePresence>
-                    {slidersOpen && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                        style={{ overflow: 'hidden', paddingBottom: '12px' }}
-                      >
-                        <SliderPanel />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  <InputPill {...pillProps} />
-                </div>
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
+          {/* Input bar — always visible at bottom */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: '24px 24px 32px',
+              background: 'linear-gradient(to top, #080808 70%, transparent)',
+              zIndex: 10,
+            }}
+          >
+            <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+              <AnimatePresence>
+                {slidersOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    style={{ overflow: 'hidden', paddingBottom: '12px' }}
+                  >
+                    <SliderPanel />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <InputPill {...pillProps} />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

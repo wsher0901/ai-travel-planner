@@ -30,11 +30,11 @@ export default function VisualDock() {
       }}
     >
       <TabBar />
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
-            className="h-full"
+            className="h-full overflow-hidden"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}

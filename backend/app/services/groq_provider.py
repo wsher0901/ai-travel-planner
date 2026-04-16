@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from typing import AsyncGenerator
 
 from groq import Groq
@@ -64,6 +65,7 @@ class GroqProvider(TravelAIProvider):
 
     async def stream_response(self, user_input: str, context: dict) -> AsyncGenerator[str, None]:
         system_prompt = SYSTEM_PROMPTS.get(context.get("mode", "plan"), SYSTEM_PROMPTS["plan"])
+        system_prompt = f"Today's date is {date.today().isoformat()}. Always use future dates.\n\n" + system_prompt
         system_prompt += _build_preferences(context.get("sliders"))
         stream = self.client.chat.completions.create(
             model=self.model,
@@ -79,8 +81,14 @@ class GroqProvider(TravelAIProvider):
                 yield content
 
     async def generate_plan(self, user_input: str, context: dict) -> dict:
-        system_prompt = (
-            "You are Roam, an expert AI travel planner. The user will describe when "
+        date_context = (
+            f"Today's date is {date.today().isoformat()}. Always generate plans for future dates. "
+            f"If the user says something vague like 'a week in June', use the upcoming June. "
+            f"Never use past dates.\n\n"
+        )
+        system_prompt = date_context + (
+            "You are Roam, an expert AI travel planner. "
+            "The user will describe when "
             "they are free and their preferences. You must respond with ONLY a valid "
             "JSON object — no explanation, no markdown, no code blocks, just raw JSON.\n\n"
             "The JSON must follow this exact structure:\n"
@@ -136,20 +144,46 @@ class GroqProvider(TravelAIProvider):
         )
         system_prompt += _build_preferences(context.get("sliders"))
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_input},
-            ],
-            stream=False,
-        )
+        raw = ""
+        for attempt in range(3):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_input},
+                    ],
+                    stream=False,
+                )
 
-        raw = response.choices[0].message.content or ""
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse AI response as JSON: {e}\nRaw response: {raw}")
+                raw = response.choices[0].message.content or ""
+
+                # Strip markdown code fences if present
+                cleaned = raw.strip()
+                if cleaned.startswith("```json"):
+                    cleaned = cleaned[7:]
+                elif cleaned.startswith("```"):
+                    cleaned = cleaned[3:]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+
+                # Try to find JSON object if there's preamble text
+                if not cleaned.startswith("{"):
+                    start = cleaned.find("{")
+                    if start != -1:
+                        cleaned = cleaned[start:]
+
+                # Find the last closing brace in case there's trailing text
+                if cleaned.count("}") > 0:
+                    last_brace = cleaned.rfind("}")
+                    cleaned = cleaned[:last_brace + 1]
+
+                return json.loads(cleaned)
+            except (json.JSONDecodeError, Exception) as e:
+                if attempt == 2:
+                    raise ValueError(f"Failed after 3 attempts: {e}\nRaw: {raw[:500]}")
+                continue
 
     async def recommend_destinations(self, dates: dict, preferences: dict) -> list[dict]:
         return []
