@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Landmark, Utensils, Music, Plane, Hotel } from 'lucide-react';
+import { Landmark, Utensils, Music, Plane, Hotel, type LucideIcon } from 'lucide-react';
 import { type PlanItem } from '@/store/tripStore';
 import { getActivityColor } from '@/lib/activityColors';
 import SkyStrip from '@/components/sky/SkyStrip';
@@ -11,7 +11,7 @@ import { getSunTimes, minToPercent } from '@/lib/sunPosition';
 import { useUIStore } from '@/store/uiStore';
 import AddActivityDialog from '@/components/tabs/itinerary/AddActivityDialog';
 
-const TYPE_ICONS: Record<string, React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>> = {
+const TYPE_ICONS: Record<string, LucideIcon> = {
   sightseeing: Landmark,
   food: Utensils,
   activity: Music,

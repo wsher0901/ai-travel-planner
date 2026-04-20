@@ -133,7 +133,7 @@ export default function MetaColumn() {
           }}>
             / 100
           </span>
-          {PLACEHOLDER_DELTA !== 0 && (
+          {(PLACEHOLDER_DELTA as number) !== 0 && (
             <span style={{
               fontSize: 10, fontWeight: 600,
               color: PLACEHOLDER_DELTA > 0 ? 'rgb(34,197,94)' : 'rgb(239,68,68)',
