@@ -136,3 +136,29 @@
     @apply font-sans;
   }
 }
+
+@keyframes skyDrift {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(8px); }
+}
+@keyframes skyTwinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+@keyframes skyPulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+@keyframes skyFall {
+  0% { transform: translateY(-15px); opacity: 0; }
+  15% { opacity: 0.75; }
+  100% { transform: translateY(175px); opacity: 0; }
+}
+@keyframes travelerBob {
+  0%, 100% { transform: translate(-50%, -100%) translateY(0); }
+  50% { transform: translate(-50%, -100%) translateY(-3px); }
+}
+@keyframes travelerRingPulse {
+  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+}

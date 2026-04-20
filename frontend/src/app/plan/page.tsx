@@ -3,9 +3,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { Compass } from 'lucide-react'
 import SignOutButton from './SignOutButton'
-import ChatInterface from '@/components/chat/ChatInterface'
 import PlanLayout from '@/components/layout/PlanLayout'
-import VisualDock from '@/components/dock/VisualDock'
 
 export default async function PlanPage() {
   const cookieStore = await cookies()
@@ -110,10 +108,7 @@ export default async function PlanPage() {
 
       {/* Content area */}
       <main className="flex flex-1 overflow-hidden" style={{ paddingTop: '56px' }}>
-        <PlanLayout
-          chatPanel={<ChatInterface />}
-          dockPanel={<VisualDock />}
-        />
+        <PlanLayout />
       </main>
     </div>
   )

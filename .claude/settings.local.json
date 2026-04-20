@@ -17,7 +17,8 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\(''app/services/gemini_provider.py''\\).read\\(\\)\\); print\\(''syntax ok''\\)\")",
       "Bash(conda run:*)",
       "Bash(C:/Users/WonseukHer/miniconda3/envs/travel-planner/python.exe -c \"import ast; ast.parse\\(open\\(''c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/backend/app/services/gemini_provider.py''\\).read\\(\\)\\); print\\(''syntax ok''\\)\")",
-      "Bash(C:/Users/WonseukHer/anaconda3/envs/travel-planner/python.exe -c \"import ast; ast.parse\\(open\\(''c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/backend/app/services/gemini_provider.py''\\).read\\(\\)\\); print\\(''syntax ok''\\)\")"
+      "Bash(C:/Users/WonseukHer/anaconda3/envs/travel-planner/python.exe -c \"import ast; ast.parse\\(open\\(''c:/Users/WonseukHer/MyFile/Project/ai-travel-planner/backend/app/services/gemini_provider.py''\\).read\\(\\)\\); print\\(''syntax ok''\\)\")",
+      "Skill(update-config)"
     ]
   }
 }
