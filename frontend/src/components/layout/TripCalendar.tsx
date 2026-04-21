@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { type PlanItem } from '@/store/tripStore';
 import { getActivityColor } from '@/lib/activityColors';
 
@@ -33,7 +33,6 @@ export default function TripCalendar({
   const tripStart = useMemo(() => new Date(tripStartDate + 'T00:00:00'), [tripStartDate]);
   const [viewYear, setViewYear] = useState(tripStart.getFullYear());
   const [viewMonth, setViewMonth] = useState(tripStart.getMonth());
-
   useEffect(() => {
     setViewYear(tripStart.getFullYear());
     setViewMonth(tripStart.getMonth());
@@ -91,7 +90,17 @@ export default function TripCalendar({
         flexDirection: 'column',
       }}
     >
+      <style>{`
+        .trip-calendar-panel:hover {
+          background: linear-gradient(180deg, rgba(245,158,11,0.04) 0%, rgba(255,255,255,0.01) 100%) !important;
+          border-color: rgba(245,158,11,0.28) !important;
+        }
+        .trip-calendar-panel:hover .trip-calendar-bloom {
+          opacity: 1 !important;
+        }
+      `}</style>
       <div
+        className="trip-calendar-panel"
         style={{
           flex: 1,
           padding: 12,
@@ -99,14 +108,31 @@ export default function TripCalendar({
           background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
           border: '1px solid rgba(255,255,255,0.06)',
           boxShadow: 'inset 0 2px 1.5px 0 rgba(165,174,184,0.1)',
+          transition: 'background 300ms ease, border-color 300ms ease',
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
           minHeight: 0,
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
+        <div
+          className="trip-calendar-bloom"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(135deg, rgba(245,158,11,0.22) 0%, rgba(245,158,11,0.08) 30%, transparent 65%)',
+            opacity: 0,
+            transition: 'opacity 300ms ease',
+            pointerEvents: 'none',
+            zIndex: 0,
+            borderRadius: 16,
+          }}
+        />
+
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px', position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span style={{
               fontSize: 16,
@@ -191,6 +217,8 @@ export default function TripCalendar({
           gridTemplateColumns: 'repeat(7, 1fr)',
           gap: 2,
           padding: '4px 8px 0',
+          position: 'relative',
+          zIndex: 1,
         }}>
           {WEEKDAYS.map((wd) => (
             <div
@@ -217,6 +245,8 @@ export default function TripCalendar({
           padding: '0 8px',
           flex: 1,
           minHeight: 0,
+          position: 'relative',
+          zIndex: 1,
         }}>
           {cells.map((day, idx) => {
             if (day === null) {
@@ -234,16 +264,6 @@ export default function TripCalendar({
               <div
                 key={dateStr}
                 onClick={() => inTrip && onSelectDate(dateStr)}
-                onMouseEnter={(e) => {
-                  if (inTrip) {
-                    const bloom = (e.currentTarget as HTMLDivElement).querySelector('.cell-hover-bloom') as HTMLDivElement | null;
-                    if (bloom) bloom.style.opacity = '1';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  const bloom = (e.currentTarget as HTMLDivElement).querySelector('.cell-hover-bloom') as HTMLDivElement | null;
-                  if (bloom) bloom.style.opacity = '0';
-                }}
                 style={{
                   position: 'relative',
                   display: 'flex',
@@ -255,36 +275,58 @@ export default function TripCalendar({
                   padding: 2,
                 }}
               >
-                <div
-                  className="cell-hover-bloom"
-                  style={{
-                    position: 'absolute',
-                    inset: -2,
-                    borderRadius: 12,
-                    background: 'radial-gradient(circle at center, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0.05) 50%, transparent 80%)',
-                    opacity: 0,
-                    transition: 'opacity 200ms ease',
-                    pointerEvents: 'none',
-                    zIndex: -1,
-                  }}
-                />
                 {/* Filled circle for in-trip or selected */}
                 {inTrip && (
                   <>
                     {isSelected ? (
-                      <motion.div
-                        layoutId="calendar-selected-day"
-                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                        style={{
-                          position: 'absolute',
-                          width: 36,
-                          height: 36,
-                          borderRadius: 10,
-                          background: 'rgb(245,158,11)',
-                          boxShadow: '0 0 20px rgba(245,158,11,0.45), 0 2px 8px rgba(245,158,11,0.3)',
-                          zIndex: 0,
-                        }}
-                      />
+                      <AnimatePresence mode="popLayout">
+                        <motion.div
+                          key={dateStr}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.12, ease: 'easeOut' }}
+                          style={{
+                            position: 'absolute',
+                            width: 36,
+                            height: 36,
+                            borderRadius: 10,
+                            background: 'rgb(245,158,11)',
+                            boxShadow: '0 0 20px rgba(245,158,11,0.45), 0 2px 8px rgba(245,158,11,0.3)',
+                            zIndex: 1,
+                          }}
+                        />
+                        <motion.div
+                          key={`${dateStr}-echo-1`}
+                          initial={{ scale: 1, opacity: 0.55 }}
+                          animate={{ scale: 1.8, opacity: 0 }}
+                          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+                          style={{
+                            position: 'absolute',
+                            width: 36,
+                            height: 36,
+                            borderRadius: 10,
+                            border: '2px solid rgba(245,158,11,0.85)',
+                            pointerEvents: 'none',
+                            zIndex: 0,
+                          }}
+                        />
+                        <motion.div
+                          key={`${dateStr}-echo-2`}
+                          initial={{ scale: 1, opacity: 0 }}
+                          animate={{ scale: 1.55, opacity: [0, 0.45, 0] }}
+                          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+                          style={{
+                            position: 'absolute',
+                            width: 36,
+                            height: 36,
+                            borderRadius: 10,
+                            border: '1.5px solid rgba(245,158,11,0.55)',
+                            pointerEvents: 'none',
+                            zIndex: 0,
+                          }}
+                        />
+                      </AnimatePresence>
                     ) : (
                       <div
                         className="day-circle"
@@ -295,7 +337,7 @@ export default function TripCalendar({
                           borderRadius: 10,
                           background: 'rgba(245,158,11,0.85)',
                           transition: 'all 200ms ease',
-                          zIndex: 0,
+                          zIndex: 1,
                         }}
                       />
                     )}
@@ -310,14 +352,14 @@ export default function TripCalendar({
                     height: 28,
                     borderRadius: 8,
                     border: '1px solid rgba(255,255,255,0.25)',
-                    zIndex: 0,
+                    zIndex: 1,
                   }} />
                 )}
 
                 {/* Day number */}
                 <span style={{
                   position: 'relative',
-                  zIndex: 1,
+                  zIndex: 2,
                   fontSize: 15,
                   fontWeight: inTrip ? 600 : 500,
                   color: inTrip
@@ -334,7 +376,7 @@ export default function TripCalendar({
                 {dots.length > 0 && inTrip && (
                   <div style={{
                     position: 'relative',
-                    zIndex: 1,
+                    zIndex: 2,
                     display: 'flex',
                     gap: 2,
                     marginTop: 2,

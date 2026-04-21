@@ -1,13 +1,18 @@
 export const ACTIVITY_COLORS = {
-  sightseeing: "#06b6d4",
-  food: "#fb923c",
-  activity: "#a78bfa",
-  transport: "#3b82f6",
+  transport: "#60a5fa",
   accommodation: "#818cf8",
+  food: "#fb923c",
+  sightseeing: "#06b6d4",
+  entertainment: "#a78bfa",
+  outdoor: "#4ade80",
+  nightlife: "#f472b6",
+  shopping: "#fbbf24",
+  wellness: "#5eead4",
+  nature: "#34d399",
 } as const;
 
 export type ActivityType = keyof typeof ACTIVITY_COLORS;
 
 export const getActivityColor = (type: string): string => {
-  return ACTIVITY_COLORS[type as ActivityType] ?? ACTIVITY_COLORS.activity;
+  return ACTIVITY_COLORS[type as ActivityType] ?? ACTIVITY_COLORS.sightseeing;
 };

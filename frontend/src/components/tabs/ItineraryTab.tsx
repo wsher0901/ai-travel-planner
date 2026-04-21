@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { useUIStore } from '@/store/uiStore';
 import { useTripStore } from '@/store/tripStore';
@@ -14,7 +15,8 @@ function formatDayLabel(iso: string | null): string {
 }
 
 export default function ItineraryTab() {
-  const { selectedDate } = useUIStore();
+  const selectedDate = useUIStore((s) => s.selectedDate);
+  const dateChangeDirection = useUIStore((s) => s.dateChangeDirection);
   const { tripPlan, planItems } = useTripStore();
   const [addOpen, setAddOpen] = useState(false);
 
@@ -81,21 +83,56 @@ export default function ItineraryTab() {
           }}>
             DAY {dayNumber}
           </span>
-          <span style={{
-            fontSize: 20, fontWeight: 600,
-            color: 'rgba(255,255,255,0.9)',
-            fontFamily: 'var(--font-sora)',
+          <div style={{
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 10,
+            overflow: 'hidden',
+            minWidth: 0,
+            flex: 1,
           }}>
-            {formatDayLabel(selectedDate)}
-          </span>
-          <span style={{
-            fontSize: 13, fontWeight: 500,
-            color: 'rgba(255,255,255,0.4)',
-            fontFamily: 'var(--font-sora)',
-            fontVariantNumeric: 'tabular-nums',
-          }}>
-            · {dayStats.count} activities · ${dayStats.totalCost}
-          </span>
+            <AnimatePresence mode="popLayout" custom={dateChangeDirection} initial={false}>
+              <motion.div
+                key={selectedDate ?? 'no-date'}
+                custom={dateChangeDirection}
+                variants={{
+                  enter: (direction: number) => ({ x: direction * 120, opacity: 0.2 }),
+                  center: { x: 0, opacity: 1 },
+                  exit: (direction: number) => ({ x: direction * -120, opacity: 0 }),
+                }}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{
+                  x: { duration: 0.44, ease: [0.4, 0, 0.2, 1] },
+                  opacity: { duration: 0.22, ease: 'easeOut' },
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 10,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{
+                  fontSize: 20, fontWeight: 600,
+                  color: 'rgba(255,255,255,0.9)',
+                  fontFamily: 'var(--font-sora)',
+                }}>
+                  {formatDayLabel(selectedDate)}
+                </span>
+                <span style={{
+                  fontSize: 13, fontWeight: 500,
+                  color: 'rgba(255,255,255,0.4)',
+                  fontFamily: 'var(--font-sora)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  · {dayStats.count} activities · ${dayStats.totalCost}
+                </span>
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </div>
         <button
           onClick={() => setAddOpen(true)}
@@ -126,8 +163,32 @@ export default function ItineraryTab() {
       </div>
 
       {/* Activity list */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <ActivityList dayItems={dayItems} selectedDate={selectedDate} tripPlan={tripPlan} />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+        <AnimatePresence mode="popLayout" custom={dateChangeDirection} initial={false}>
+          <motion.div
+            key={selectedDate ?? 'no-date-list'}
+            custom={dateChangeDirection}
+            variants={{
+              enter: (direction: number) => ({ x: direction * 120, opacity: 0.2 }),
+              center: { x: 0, opacity: 1 },
+              exit: (direction: number) => ({ x: direction * -120, opacity: 0 }),
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{
+              x: { duration: 0.44, ease: [0.4, 0, 0.2, 1] },
+              opacity: { duration: 0.22, ease: 'easeOut' },
+            }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              overflow: 'auto',
+            }}
+          >
+            <ActivityList dayItems={dayItems} selectedDate={selectedDate} tripPlan={tripPlan} />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {selectedDate && (

@@ -17,13 +17,13 @@ class TravelAIProvider(ABC):
         pass
 
 
-def get_provider(provider_name: str) -> TravelAIProvider:
+def get_provider(provider_name: str, model: str | None = None) -> TravelAIProvider:
     if provider_name == "gemini":
         from app.services.gemini_provider import GeminiProvider
-        return GeminiProvider()
+        return GeminiProvider(model=model) if model else GeminiProvider()
     elif provider_name == "groq":
         from app.services.groq_provider import GroqProvider
-        return GroqProvider()
+        return GroqProvider(model=model) if model else GroqProvider()
     elif provider_name == "claude":
         from app.services.claude_provider import ClaudeProvider
         return ClaudeProvider()

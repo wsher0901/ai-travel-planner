@@ -5,6 +5,7 @@ interface UIState {
   activeTab: 'itinerary' | 'map' | 'weather' | 'budget' | 'score'
   isTransitioning: boolean
   selectedDate: string | null
+  dateChangeDirection: 1 | -1 | 0
   hoveredActivityId: string | null
   expandedActivityId: string | null
   focusMode: boolean
@@ -23,13 +24,20 @@ export const useUIStore = create<UIState>((set) => ({
   activeTab: 'itinerary',
   isTransitioning: false,
   selectedDate: null,
+  dateChangeDirection: 0,
   hoveredActivityId: null,
   expandedActivityId: null,
   focusMode: false,
   setLayoutMode: (layoutMode) => set({ layoutMode }),
   setActiveTab: (activeTab) => set({ activeTab }),
   setIsTransitioning: (isTransitioning) => set({ isTransitioning }),
-  setSelectedDate: (selectedDate) => set({ selectedDate }),
+  setSelectedDate: (selectedDate) => set((s) => {
+    let dateChangeDirection: 1 | -1 | 0 = 0;
+    if (s.selectedDate && selectedDate && s.selectedDate !== selectedDate) {
+      dateChangeDirection = selectedDate > s.selectedDate ? 1 : -1;
+    }
+    return { selectedDate, dateChangeDirection };
+  }),
   setHoveredActivityId: (hoveredActivityId) => set({ hoveredActivityId }),
   setExpandedActivityId: (expandedActivityId) => set({ expandedActivityId }),
   toggleExpandedActivityId: (id) => set((s) => ({
