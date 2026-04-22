@@ -7,15 +7,15 @@ interface UIState {
   selectedDate: string | null
   dateChangeDirection: 1 | -1 | 0
   hoveredActivityId: string | null
-  expandedActivityId: string | null
+  expandedActivityIds: Set<string>
   focusMode: boolean
   setLayoutMode: (mode: 'discovery' | 'split') => void
   setActiveTab: (tab: UIState['activeTab']) => void
   setIsTransitioning: (v: boolean) => void
   setSelectedDate: (date: string | null) => void
   setHoveredActivityId: (id: string | null) => void
-  setExpandedActivityId: (id: string | null) => void
   toggleExpandedActivityId: (id: string) => void
+  clearExpandedActivityIds: () => void
   setFocusMode: (focus: boolean) => void
 }
 
@@ -26,7 +26,7 @@ export const useUIStore = create<UIState>((set) => ({
   selectedDate: null,
   dateChangeDirection: 0,
   hoveredActivityId: null,
-  expandedActivityId: null,
+  expandedActivityIds: new Set<string>(),
   focusMode: false,
   setLayoutMode: (layoutMode) => set({ layoutMode }),
   setActiveTab: (activeTab) => set({ activeTab }),
@@ -39,9 +39,12 @@ export const useUIStore = create<UIState>((set) => ({
     return { selectedDate, dateChangeDirection };
   }),
   setHoveredActivityId: (hoveredActivityId) => set({ hoveredActivityId }),
-  setExpandedActivityId: (expandedActivityId) => set({ expandedActivityId }),
-  toggleExpandedActivityId: (id) => set((s) => ({
-    expandedActivityId: s.expandedActivityId === id ? null : id,
-  })),
+  toggleExpandedActivityId: (id) => set((s) => {
+    const next = new Set(s.expandedActivityIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return { expandedActivityIds: next };
+  }),
+  clearExpandedActivityIds: () => set({ expandedActivityIds: new Set<string>() }),
   setFocusMode: (focusMode) => set({ focusMode }),
 }))

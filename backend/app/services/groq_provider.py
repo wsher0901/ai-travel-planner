@@ -63,7 +63,7 @@ class GroqProvider(TravelAIProvider):
                         {"role": "user", "content": user_input},
                     ],
                     stream=False,
-                    max_tokens=8000,
+                    max_tokens=7000,
                 )
                 raw = response.choices[0].message.content or ""
                 logger.info(f"Groq response received | length={len(raw)} | preview={raw[:200]!r}")

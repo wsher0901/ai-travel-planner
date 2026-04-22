@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useRef, useLayoutEffect, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
   Plane, BedDouble, UtensilsCrossed, Landmark, Ticket,
@@ -58,7 +59,7 @@ function formatDuration(totalMin: number): string {
 
 export default function DayPulseOverview({ selectedDate, planItems }: Props) {
   const hoveredActivityId = useUIStore((s) => s.hoveredActivityId);
-  const expandedActivityId = useUIStore((s) => s.expandedActivityId);
+  const expandedActivityIds = useUIStore((s) => s.expandedActivityIds);
   const setHoveredActivityId = useUIStore((s) => s.setHoveredActivityId);
   const toggleExpandedActivityId = useUIStore((s) => s.toggleExpandedActivityId);
   const dateChangeDirection = useUIStore((s) => s.dateChangeDirection);
@@ -73,11 +74,17 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     leftPercent: number;
   } | null>(null);
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [peekRect, setPeekRect] = useState<{ pillCenterX: number; pillTopY: number } | null>(null);
 
-  const schedulePeek = (item: PlanItem, leftPercent: number) => {
+  const schedulePeek = (item: PlanItem, pillEl: HTMLElement) => {
     if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
     peekTimerRef.current = setTimeout(() => {
-      setPeekItem({ item, leftPercent });
+      const rect = pillEl.getBoundingClientRect();
+      setPeekRect({
+        pillCenterX: rect.left + rect.width / 2,
+        pillTopY: rect.top,
+      });
+      setPeekItem({ item, leftPercent: 0 });
     }, 200);
   };
 
@@ -87,6 +94,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
       peekTimerRef.current = null;
     }
     setPeekItem(null);
+    setPeekRect(null);
   };
 
   const dayItems = useMemo(() => {
@@ -336,34 +344,45 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
               top: '50%',
               left: `${(slot.midMin / DAY_MINUTES) * 100}%`,
               transform: 'translate(-50%, -50%)',
-              width: 28,
-              height: 28,
-              background: 'transparent',
-              border: 'none',
-              color: 'rgba(255,255,255,0.95)',
-              fontSize: 28,
-              fontWeight: 300,
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              background: 'rgba(12,15,22,0.9)',
+              border: '1.5px solid rgba(6,182,212,0.7)',
+              color: 'rgb(6,182,212)',
+              fontSize: 16,
+              fontWeight: 400,
               lineHeight: 1,
               padding: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              textShadow: '0 1px 3px rgba(0,0,0,0.7), 0 0 6px rgba(0,0,0,0.5)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
+              boxShadow: '0 0 8px rgba(6,182,212,0.35), 0 2px 6px rgba(0,0,0,0.4)',
               zIndex: 4,
-              transition: 'all 160ms ease',
+              transition: 'all 180ms cubic-bezier(0.22, 1, 0.36, 1)',
             }}
             onMouseEnter={(e) => {
               const el = e.currentTarget as HTMLButtonElement;
+              el.style.width = '26px';
+              el.style.height = '26px';
+              el.style.background = 'rgba(245,158,11,0.15)';
+              el.style.border = '1.5px solid rgba(245,158,11,0.9)';
               el.style.color = 'rgb(245,158,11)';
-              el.style.textShadow = '0 0 12px rgba(245,158,11,0.8), 0 1px 3px rgba(0,0,0,0.7)';
-              el.style.transform = 'translate(-50%, -50%) scale(1.25)';
+              el.style.boxShadow = 'inset 0 0 8px rgba(245,158,11,0.25), 0 0 14px rgba(245,158,11,0.45), 0 2px 8px rgba(0,0,0,0.4)';
+              el.style.transform = 'translate(-50%, -50%) rotate(90deg)';
             }}
             onMouseLeave={(e) => {
               const el = e.currentTarget as HTMLButtonElement;
-              el.style.color = 'rgba(255,255,255,0.95)';
-              el.style.textShadow = '0 1px 3px rgba(0,0,0,0.7), 0 0 6px rgba(0,0,0,0.5)';
-              el.style.transform = 'translate(-50%, -50%) scale(1)';
+              el.style.width = '22px';
+              el.style.height = '22px';
+              el.style.background = 'rgba(12,15,22,0.9)';
+              el.style.border = '1.5px solid rgba(6,182,212,0.7)';
+              el.style.color = 'rgb(6,182,212)';
+              el.style.boxShadow = '0 0 8px rgba(6,182,212,0.35), 0 2px 6px rgba(0,0,0,0.4)';
+              el.style.transform = 'translate(-50%, -50%) rotate(0deg)';
             }}
           >+</button>
         ))}
@@ -381,20 +400,18 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
           const isNarrow = durMin < 50;
           const isTiny = durMin < 30;
           const itemIdStr = item.id ? String(item.id) : '';
-          const isActive = itemIdStr !== '' && (itemIdStr === hoveredActivityId || itemIdStr === expandedActivityId);
+          const isActive = itemIdStr !== '' && (itemIdStr === hoveredActivityId || expandedActivityIds.has(itemIdStr));
           const priority = item.priority ?? 'flexible';
           const isMustDo = priority === 'must_do';
-          const isFlexible = priority === 'flexible';
 
           if (isTiny) {
             return (
               <div
                 key={item.id ? String(item.id) : `dot-${date}-${idx}`}
                 onClick={() => { if (item.id) toggleExpandedActivityId(String(item.id)); }}
-                onMouseEnter={() => {
-                  console.log('[DOT HOVER]', item.title, 'id=', item.id);
+                onMouseEnter={(e) => {
                   if (item.id) setHoveredActivityId(String(item.id));
-                  schedulePeek(item, left);
+                  schedulePeek(item, e.currentTarget as HTMLElement);
                 }}
                 onMouseLeave={() => {
                   setHoveredActivityId(null);
@@ -433,26 +450,24 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 background: isActive
                   ? `linear-gradient(180deg, rgba(16,20,30,0.96) 0%, rgba(12,15,22,0.94) 100%)`
                   : `linear-gradient(180deg, rgba(12,15,22,0.94) 0%, rgba(12,15,22,0.88) 100%)`,
-                border: `${isMustDo ? 2 : 1.5}px ${isFlexible ? 'dashed' : 'solid'} ${color}`,
+                border: `1.5px solid ${color}`,
                 borderRadius: 12,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: '0 6px',
-                boxShadow: isActive
-                  ? (isMustDo
-                      ? `inset 0 1px 0 ${color}, 0 0 0 1px rgba(245,158,11,0.4), 0 4px 14px rgba(0,0,0,0.5), 0 0 18px ${color}`
-                      : `inset 0 1px 0 ${color}, 0 0 0 1px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.5), 0 0 16px ${color}aa`)
-                  : (isMustDo
-                      ? `inset 0 1px 0 ${color}99, 0 0 0 1px rgba(245,158,11,0.25), 0 2px 10px rgba(0,0,0,0.45), 0 0 12px ${color}66`
-                      : `inset 0 1px 0 ${color}66, 0 0 0 1px rgba(0,0,0,0.4), 0 2px 10px rgba(0,0,0,0.45), 0 0 10px ${color}55`),
+                boxShadow: [
+                  isMustDo ? 'inset 0 0 0 2px rgba(12,15,22,0.95), inset 0 0 0 3px rgba(245,158,11,0.85)' : null,
+                  isActive
+                    ? `inset 0 1px 0 ${color}, 0 0 0 1px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.5), 0 0 16px ${color}aa`
+                    : `inset 0 1px 0 ${color}66, 0 0 0 1px rgba(0,0,0,0.4), 0 2px 10px rgba(0,0,0,0.45), 0 0 10px ${color}55`,
+                ].filter(Boolean).join(', '),
                 cursor: 'pointer',
                 transition: 'height 180ms ease, box-shadow 180ms ease, background 180ms ease',
               }}
-              onMouseEnter={() => {
-                console.log('[PILL HOVER]', item.title, 'id=', item.id, 'left=', left);
+              onMouseEnter={(e) => {
                 if (item.id) setHoveredActivityId(String(item.id));
-                schedulePeek(item, left);
+                schedulePeek(item, e.currentTarget as HTMLElement);
               }}
               onMouseLeave={() => {
                 setHoveredActivityId(null);
@@ -462,18 +477,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 if (item.id) toggleExpandedActivityId(String(item.id));
               }}
             >
-              {isMustDo && (
-                <div style={{
-                  position: 'absolute',
-                  top: 0, right: 0,
-                  width: 0, height: 0,
-                  borderStyle: 'solid',
-                  borderWidth: '0 8px 8px 0',
-                  borderColor: `transparent rgb(245,158,11) transparent transparent`,
-                  filter: 'drop-shadow(0 0 3px rgba(245,158,11,0.7))',
-                  pointerEvents: 'none',
-                }} />
-              )}
               <Icon
                 size={20}
                 color={color}
@@ -513,6 +516,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
         padding: 12,
         display: 'flex', flexDirection: 'column', gap: 8,
         overflow: 'hidden',
+        position: 'relative',
       }}>
       {/* Bar */}
       <div style={{
@@ -704,7 +708,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 initial={initial}
                 animate={animate}
                 transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
-                onMouseEnter={() => console.log('[TRACK HOVER] reached the pill filmstrip track')}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -737,119 +740,126 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
             );
           })()}
 
-          {peekItem && (() => {
-            const it = peekItem.item;
-            const startMin = timeToMin(it.start_time!);
-            const durMin = it.end_time ? timeToMin(it.end_time) - startMin : it.duration_minutes ?? 60;
-            const hrs = Math.floor(startMin / 60);
-            const mins = startMin % 60;
-            const endMin = startMin + durMin;
-            const eh = Math.floor(endMin / 60);
-            const em = endMin % 60;
-            const fmt = (h: number, m: number) => {
-              const ampm = h >= 12 ? 'PM' : 'AM';
-              const hr12 = h % 12 === 0 ? 12 : h % 12;
-              return `${hr12}:${String(m).padStart(2, '0')} ${ampm}`;
-            };
-            const color = getActivityColor(it.activity_type);
-            const priority = it.priority ?? 'flexible';
-            const isMustDo = priority === 'must_do';
-            const clampedLeft = Math.max(3, Math.min(97, peekItem.leftPercent));
-
-            return (
-              <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 4 }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
-                style={{
-                  position: 'absolute',
-                  left: `${clampedLeft}%`,
-                  bottom: 'calc(100% + 10px)',
-                  transform: 'translateX(-50%)',
-                  minWidth: 200,
-                  maxWidth: 260,
-                  padding: '10px 12px',
-                  background: 'rgba(12,15,22,0.96)',
-                  backdropFilter: 'blur(12px)',
-                  WebkitBackdropFilter: 'blur(12px)',
-                  border: `1px solid ${color}66`,
-                  borderRadius: 10,
-                  boxShadow: `0 8px 28px rgba(0,0,0,0.6), 0 0 20px ${color}40`,
-                  pointerEvents: 'none',
-                  zIndex: 20,
-                  fontFamily: 'var(--font-sora)',
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: 8,
-                  marginBottom: 6,
-                }}>
-                  <span style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: 'rgba(255,255,255,0.96)',
-                    lineHeight: 1.3,
-                    flex: 1,
-                  }}>
-                    {it.title}
-                  </span>
-                  {isMustDo && (
-                    <span style={{
-                      fontSize: 9,
-                      fontWeight: 700,
-                      letterSpacing: '0.08em',
-                      color: 'rgb(245,158,11)',
-                      background: 'rgba(245,158,11,0.12)',
-                      border: '1px solid rgba(245,158,11,0.35)',
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      textTransform: 'uppercase',
-                      flexShrink: 0,
-                    }}>MUST</span>
-                  )}
-                </div>
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 3,
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  color: 'rgba(255,255,255,0.6)',
-                }}>
-                  <div>{fmt(hrs, mins)} – {fmt(eh, em)} · {formatDuration(durMin)}</div>
-                  {(it.cost_estimate ?? 0) > 0 && (
-                    <div>${it.cost_estimate}</div>
-                  )}
-                  {it.location_name && (
-                    <div style={{
-                      fontFamily: 'var(--font-sora)',
-                      fontSize: 11,
-                      color: 'rgba(255,255,255,0.45)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>{it.location_name}</div>
-                  )}
-                </div>
-                <div style={{
-                  position: 'absolute',
-                  bottom: -5,
-                  left: '50%',
-                  transform: 'translateX(-50%) rotate(45deg)',
-                  width: 10,
-                  height: 10,
-                  background: 'rgba(12,15,22,0.96)',
-                  borderRight: `1px solid ${color}66`,
-                  borderBottom: `1px solid ${color}66`,
-                }} />
-              </motion.div>
-            );
-          })()}
         </div>
       </div>
+
+      {peekItem && peekRect && (() => {
+        const it = peekItem.item;
+        const startMin = timeToMin(it.start_time!);
+        const durMin = it.end_time ? timeToMin(it.end_time) - startMin : it.duration_minutes ?? 60;
+        const hrs = Math.floor(startMin / 60);
+        const mins = startMin % 60;
+        const endMin = startMin + durMin;
+        const eh = Math.floor(endMin / 60);
+        const em = endMin % 60;
+        const fmt = (h: number, m: number) => {
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          const hr12 = h % 12 === 0 ? 12 : h % 12;
+          return `${hr12}:${String(m).padStart(2, '0')} ${ampm}`;
+        };
+        const color = getActivityColor(it.activity_type);
+        const priority = it.priority ?? 'flexible';
+        const isMustDo = priority === 'must_do';
+
+        const peekLeft = peekRect.pillCenterX;
+        const peekTop = peekRect.pillTopY;
+
+        if (typeof document === 'undefined') return null;
+        return createPortal(
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            style={{
+              position: 'fixed',
+              left: peekLeft,
+              top: peekTop - 8,
+              transform: 'translate(-50%, -100%)',
+              minWidth: 200,
+              maxWidth: 260,
+              padding: '10px 12px',
+              background: 'rgba(12,15,22,0.96)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: `1px solid ${color}66`,
+              borderRadius: 10,
+              boxShadow: `0 8px 28px rgba(0,0,0,0.6), 0 0 20px ${color}40`,
+              pointerEvents: 'none',
+              zIndex: 9999,
+              fontFamily: 'var(--font-sora)',
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8,
+              marginBottom: 6,
+            }}>
+              <span style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'rgba(255,255,255,0.96)',
+                lineHeight: 1.3,
+                flex: 1,
+              }}>
+                {it.title}
+              </span>
+              {isMustDo && (
+                <span style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  color: 'rgb(245,158,11)',
+                  background: 'rgba(245,158,11,0.12)',
+                  border: '1px solid rgba(245,158,11,0.35)',
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  textTransform: 'uppercase',
+                  flexShrink: 0,
+                }}>MUST</span>
+              )}
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+              fontSize: 12,
+              fontWeight: 500,
+              fontFamily: 'monospace',
+              color: 'rgba(255,255,255,0.92)',
+            }}>
+              <div>{fmt(hrs, mins)} – {fmt(eh, em)} · {formatDuration(durMin)}</div>
+              {(it.cost_estimate ?? 0) > 0 && (
+                <div>${it.cost_estimate}</div>
+              )}
+              {it.location_name && (
+                <div style={{
+                  fontFamily: 'var(--font-sora)',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: 'rgba(255,255,255,0.7)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>{it.location_name}</div>
+              )}
+            </div>
+            <div style={{
+              position: 'absolute',
+              bottom: -5,
+              left: '50%',
+              transform: 'translateX(-50%) rotate(45deg)',
+              width: 10,
+              height: 10,
+              background: 'rgba(12,15,22,0.96)',
+              borderRight: `1px solid ${color}66`,
+              borderBottom: `1px solid ${color}66`,
+            }} />
+          </motion.div>,
+          document.body
+        );
+      })()}
 
       {selectedDate && (
         <AddActivityDialog

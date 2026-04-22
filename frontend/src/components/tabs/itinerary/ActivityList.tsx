@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { MapPin, Landmark, Utensils, Music, Plane, Hotel, Calendar, ExternalLink, Sparkles, Tag } from 'lucide-react';
+import { MapPin, Landmark, Utensils, Music, Plane, Hotel, Calendar, ExternalLink, Sparkles, Tag, ChevronDown } from 'lucide-react';
 import { type PlanItem, type TripPlan } from '@/store/tripStore';
 import { getActivityColor } from '@/lib/activityColors';
 import { useUIStore } from '@/store/uiStore';
@@ -65,10 +65,10 @@ const PRIORITY_STYLES = {
 };
 
 export default function ActivityList({ dayItems, tripPlan }: Props) {
+  const [localHoveredId, setLocalHoveredId] = useState<string | null>(null);
   const hoveredActivityId = useUIStore((s) => s.hoveredActivityId);
-  const expandedActivityId = useUIStore((s) => s.expandedActivityId);
-  const setHoveredActivityId = useUIStore((s) => s.setHoveredActivityId);
-  const setExpandedActivityId = useUIStore((s) => s.setExpandedActivityId);
+  const expandedActivityIds = useUIStore((s) => s.expandedActivityIds);
+  const toggleExpandedActivityId = useUIStore((s) => s.toggleExpandedActivityId);
 
   const sorted = useMemo(() => {
     return [...dayItems].sort((a, b) => {
@@ -105,7 +105,11 @@ export default function ActivityList({ dayItems, tripPlan }: Props) {
         const prioStyle = PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.flexible;
         const location = item.location_name ?? item.address;
         const rowId = item.id ? String(item.id) : null;
-        const isExpanded = rowId !== null && (rowId === hoveredActivityId || rowId === expandedActivityId);
+        const isPillHovered = rowId !== null && rowId === hoveredActivityId;
+        const isSticky = rowId !== null && expandedActivityIds.has(rowId);
+        const isExpanded = isPillHovered || isSticky;
+        const isCardHovered = rowId !== null && rowId === localHoveredId;
+        const isHighlighted = isPillHovered || isSticky || isCardHovered;
 
         return (
           <motion.div
@@ -113,19 +117,22 @@ export default function ActivityList({ dayItems, tripPlan }: Props) {
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, delay: idx * 0.05, ease: [0.22, 1, 0.36, 1] }}
-            onClick={() => { if (rowId) setExpandedActivityId(rowId === expandedActivityId ? null : rowId); }}
-            onMouseEnter={() => { if (rowId) setHoveredActivityId(rowId); }}
-            onMouseLeave={() => setHoveredActivityId(null)}
+            onClick={() => { if (rowId) toggleExpandedActivityId(rowId); }}
+            onMouseEnter={() => { if (rowId) setLocalHoveredId(rowId); }}
+            onMouseLeave={() => setLocalHoveredId(null)}
             style={{
               display: 'flex',
               flexDirection: 'column',
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid rgba(255,255,255,0.05)',
+              background: `${color}0c`,
+              border: `1px solid ${color}40`,
               borderLeft: `3px solid ${color}`,
               borderRadius: 10,
               cursor: 'pointer',
               overflow: 'hidden',
-              transition: 'background-color 150ms ease, border-color 150ms ease',
+              boxShadow: isHighlighted
+                ? `inset 0 0 10px ${color}22, 0 0 20px ${color}55, 0 0 0 1px ${color}60, 0 2px 8px rgba(0,0,0,0.3)`
+                : `inset 0 0 10px ${color}22, 0 0 0 1px ${color}10`,
+              transition: 'box-shadow 200ms ease',
             }}
           >
             {/* ==== Compact row ==== */}
@@ -222,17 +229,34 @@ export default function ActivityList({ dayItems, tripPlan }: Props) {
                 }}>
                   {currency}{item.cost_estimate ?? 0}
                 </span>
+                <motion.div
+                  animate={{ rotate: isExpanded ? 180 : 0 }}
+                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isExpanded ? 'rgb(245,158,11)' : 'rgba(255,255,255,0.35)',
+                    transition: 'color 180ms ease',
+                  }}
+                >
+                  <ChevronDown size={14} />
+                </motion.div>
               </div>
             </div>
 
             {/* ==== Expanded section ==== */}
-            <AnimatePresence>
+            <AnimatePresence initial={false}>
               {isExpanded && (
                 <motion.div
+                  key="expanded"
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.22, ease: 'easeOut' }}
+                  transition={{
+                    height: { duration: 0.32, ease: [0.22, 1, 0.36, 1] },
+                    opacity: { duration: 0.2, ease: 'easeOut', delay: isExpanded ? 0.08 : 0 },
+                  }}
                   style={{ overflow: 'hidden' }}
                 >
                   <div style={{

@@ -59,7 +59,7 @@ class GeminiProvider(TravelAIProvider):
                 response = model.generate_content(
                     user_input,
                     generation_config={
-                        "max_output_tokens": 8000,
+                        "max_output_tokens": 7000,
                         "response_mime_type": "application/json",
                     },
                 )

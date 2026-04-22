@@ -592,7 +592,7 @@ function GlobeSection({ onReady, onArcChange, onPhaseChange, onCardVisible }: {
 
     // Blue-marble texture — vivid continents, real oceans
     const earthTex = loader.load(
-      'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
+      '/textures/earth-blue-marble.jpg',
       () => { onReady?.() },
     )
     earthTex.colorSpace = THREE.SRGBColorSpace
@@ -604,7 +604,7 @@ function GlobeSection({ onReady, onArcChange, onPhaseChange, onCardVisible }: {
     ))
 
     // Cloud layer — rotates slightly faster than the earth in the render loop
-    const cloudTex = loader.load('https://unpkg.com/three-globe/example/img/earth-clouds.png')
+    const cloudTex = loader.load('/textures/earth-clouds.png')
     cloudTex.colorSpace = THREE.SRGBColorSpace
     const cloudMesh = new THREE.Mesh(
       new THREE.SphereGeometry(1.025, 64, 64),

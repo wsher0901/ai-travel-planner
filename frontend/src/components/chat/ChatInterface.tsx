@@ -828,7 +828,7 @@ export default function ChatInterface() {
         number_of_travelers: data.number_of_travelers || 1,
         user_timezone: data.user_timezone || null,
       })
-      useTripStore.getState().setPlanItems(data.items || [])
+      useTripStore.getState().setPlanItems(data.plan_items || data.items || [])
 
       await new Promise(r => setTimeout(r, 1500))
       const ctaText = "Your trip plan is ready! Want me to open the visual planner? You'll get an interactive timeline, map, weather forecasts, and budget breakdown.\n\n[CTA:POST_PLAN]"

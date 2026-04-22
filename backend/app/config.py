@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     groq_api_key: str = ""
     anthropic_api_key: str = ""
+    openrouter_api_key: str = ""
     supabase_url: str = ""
     supabase_service_key: str = ""
     google_maps_api_key: str = ""

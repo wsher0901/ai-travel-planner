@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from supabase import create_client
 
 from app.config import settings
-from app.services.ai_provider import get_provider
+from app.services.provider_ladder import get_ladder
 
 logger = logging.getLogger("roam.plan")
 if not logger.handlers:
@@ -176,13 +176,19 @@ class PlanRequest(BaseModel):
 async def generate_plan(body: PlanRequest):
     logger.info(f"/plan/generate | user_id={body.user_id} | session_id={body.session_id} | message_preview={body.message[:120]!r}")
     try:
-        provider = get_provider(settings.ai_provider)
+        ladder = get_ladder()
 
         try:
-            logger.info("Calling AI provider generate_plan")
-            plan = await provider.generate_plan(body.message, {"sliders": body.sliders})
+            logger.info(f"Calling ladder | status={ladder.status()}")
+            plan = await ladder.generate_plan(body.message, {"sliders": body.sliders})
         except ValueError as e:
             raise HTTPException(status_code=502, detail=str(e))
+        except Exception as e:
+            logger.error(f"Ladder exhausted: {type(e).__name__}: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"All AI providers currently unavailable. Please retry shortly. ({type(e).__name__})",
+            )
 
         logger.info(f"AI plan received | destination={plan.get('destination')} | items_count={len(plan.get('plan_items', plan.get('items', [])))}")
         print(f"AI returned plan with keys: {list(plan.keys())}")
@@ -385,3 +391,8 @@ async def generate_plan(body: PlanRequest):
         logger.error(f"/plan/generate failed | exception_type={type(e).__name__} | message={str(e)}")
         logger.error(f"Traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {str(e)}")
+
+
+@router.get("/ladder-status")
+async def ladder_status():
+    return {"rungs": get_ladder().status()}

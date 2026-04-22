@@ -27,4 +27,7 @@ def get_provider(provider_name: str, model: str | None = None) -> TravelAIProvid
     elif provider_name == "claude":
         from app.services.claude_provider import ClaudeProvider
         return ClaudeProvider()
+    elif provider_name == "openrouter":
+        from app.services.openrouter_provider import OpenRouterProvider
+        return OpenRouterProvider(model=model) if model else OpenRouterProvider()
     raise ValueError("Unknown provider: " + provider_name)
