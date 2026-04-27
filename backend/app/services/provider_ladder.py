@@ -2,7 +2,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any
 
 from app.services.ai_provider import TravelAIProvider, get_provider
 
@@ -32,7 +32,7 @@ class RungState:
     model_name: str
     available_at: float = 0.0  # epoch seconds; 0 = available now
     consecutive_failures: int = 0
-    last_error: Optional[str] = None
+    last_error: str | None = None
 
     def is_available(self, now: float) -> bool:
         return now >= self.available_at
@@ -59,13 +59,18 @@ class RungState:
 
 
 def parse_retry_after_from_groq(msg: str) -> float:
-    """Groq 429 messages include 'Please try again in 28m37.631999999s'."""
+    """Parse Groq-style '429 — Please try again in 28m37.63s' messages.
+
+    Note: this function is Groq-specific. For non-Groq providers (OpenRouter,
+    Gemini) that don't embed a retry-after string in the error, the caller
+    should use a safe default (e.g. 300s) rather than calling this function.
+    """
     m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", msg)
     if m:
         minutes = int(m.group(1)) if m.group(1) else 0
         seconds = float(m.group(2))
         return minutes * 60 + seconds
-    # Gemini/generic 429 — default 5 min
+    # No parseable retry-after → default 5 min
     return 300.0
 
 
@@ -80,13 +85,13 @@ def is_rate_limit(exc: Exception) -> bool:
 
 
 class ProviderLadder:
-    def __init__(self, rungs: Optional[list[tuple[str, str]]] = None) -> None:
+    def __init__(self, rungs: list[tuple[str, str]] | None = None) -> None:
         self.rungs: list[RungState] = [
             RungState(provider_name=p, model_name=m)
             for p, m in (rungs or DEFAULT_RUNGS)
         ]
 
-    def status(self) -> list[dict]:
+    def status(self) -> list[dict[str, Any]]:
         now = time.time()
         return [
             {
@@ -101,11 +106,12 @@ class ProviderLadder:
         ]
 
     async def generate_plan(self, user_input: str, context: dict) -> dict:
-        now = time.time()
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         attempted: list[str] = []
 
-        for rung in self.rungs:
+        for idx, rung in enumerate(self.rungs):
+            # Refresh now inside the loop so cooling checks use current time
+            now = time.time()
             if not rung.is_available(now):
                 logger.info(
                     f"Skipping {rung.provider_name}/{rung.model_name} "
@@ -126,12 +132,29 @@ class ProviderLadder:
             except Exception as e:
                 last_exc = e
                 reason = f"{type(e).__name__}: {str(e)[:200]}"
-                if is_rate_limit(e):
+                rate_limited = is_rate_limit(e)
+                if rate_limited:
+                    # parse_retry_after_from_groq works for Groq; non-Groq providers
+                    # will get the 300s default since their errors don't contain the
+                    # "try again in Xm Ys" pattern.
                     retry_after = parse_retry_after_from_groq(str(e))
                     rung.mark_cooling(retry_after, reason)
                 else:
                     rung.mark_failed(reason)
-                logger.warning(f"Ladder fell through from {label}: {reason}")
+
+                next_label = (
+                    f"{self.rungs[idx + 1].provider_name}/{self.rungs[idx + 1].model_name}"
+                    if idx + 1 < len(self.rungs)
+                    else None
+                )
+                if rate_limited and next_label:
+                    logger.warning(f"{label} rate-limited (429), promoting to {next_label}")
+                elif rate_limited:
+                    logger.error(f"{label} rate-limited (429), no more rungs")
+                elif next_label:
+                    logger.warning(f"{label} failed ({reason}), promoting to {next_label}")
+                else:
+                    logger.warning(f"Ladder fell through from {label}: {reason}")
                 continue
 
         logger.error(f"Ladder exhausted | attempted={attempted}")
@@ -142,7 +165,7 @@ class ProviderLadder:
 
 # Module-level singleton. Safe for FastAPI's single-process dev server.
 # Phase 5: replace with Redis-backed state for multi-worker deployments.
-_ladder_singleton: Optional[ProviderLadder] = None
+_ladder_singleton: ProviderLadder | None = None
 
 
 def get_ladder() -> ProviderLadder:

@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useState, useRef, useLayoutEffect, useEffect } from 'react';
+import { useMemo, useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plane, BedDouble, UtensilsCrossed, Landmark, Ticket,
   Mountain, Martini, ShoppingBag, Flower2, TreePine,
@@ -14,7 +14,6 @@ import SkyStrip from '@/components/sky/SkyStrip';
 import { type WeatherSegment } from '@/components/sky/types';
 import { getSunTimes, minToPercent } from '@/lib/sunPosition';
 import { useUIStore } from '@/store/uiStore';
-import AddActivityDialog from '@/components/tabs/itinerary/AddActivityDialog';
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
   transport: Plane,
@@ -35,19 +34,12 @@ interface Props {
 }
 
 const DAY_MINUTES = 1440;
-const SUNRISE_MIN = 6 * 60;
-const SUNSET_MIN = 20 * 60;
-const GAP_THRESHOLD_MIN = 60;
+const EMPTY_WEATHER_SEGMENTS: WeatherSegment[] = [];
 
 function timeToMin(t: string): number {
+  if (!t || !t.includes(':')) return 0;
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
-}
-
-function formatDayLabel(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function formatDuration(totalMin: number): string {
@@ -58,16 +50,13 @@ function formatDuration(totalMin: number): string {
 }
 
 export default function DayPulseOverview({ selectedDate, planItems }: Props) {
-  const hoveredActivityId = useUIStore((s) => s.hoveredActivityId);
-  const expandedActivityIds = useUIStore((s) => s.expandedActivityIds);
-  const setHoveredActivityId = useUIStore((s) => s.setHoveredActivityId);
-  const toggleExpandedActivityId = useUIStore((s) => s.toggleExpandedActivityId);
+  const hoverExpandedId = useUIStore((s) => s.hoverExpandedId);
+  const lockedExpandedId = useUIStore((s) => s.lockedExpandedId);
+  const suppressHoverUntilLeaveId = useUIStore((s) => s.suppressHoverUntilLeaveId);
+  const setHoverExpandedId = useUIStore((s) => s.setHoverExpandedId);
   const dateChangeDirection = useUIStore((s) => s.dateChangeDirection);
   const tripPlan = useTripStore((s) => s.tripPlan);
-
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [prefillStart, setPrefillStart] = useState<string | undefined>();
-  const [prefillDuration, setPrefillDuration] = useState<number>(60);
+  const recentlyAddedIds = useTripStore((s) => s.recentlyAddedIds);
 
   const [peekItem, setPeekItem] = useState<{
     item: PlanItem;
@@ -76,7 +65,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [peekRect, setPeekRect] = useState<{ pillCenterX: number; pillTopY: number } | null>(null);
 
-  const schedulePeek = (item: PlanItem, pillEl: HTMLElement) => {
+  const schedulePeek = useCallback((item: PlanItem, pillEl: HTMLElement) => {
     if (peekTimerRef.current) clearTimeout(peekTimerRef.current);
     peekTimerRef.current = setTimeout(() => {
       const rect = pillEl.getBoundingClientRect();
@@ -86,52 +75,30 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
       });
       setPeekItem({ item, leftPercent: 0 });
     }, 200);
-  };
+  }, []);
 
-  const cancelPeek = () => {
+  const cancelPeek = useCallback(() => {
     if (peekTimerRef.current) {
       clearTimeout(peekTimerRef.current);
       peekTimerRef.current = null;
     }
     setPeekItem(null);
     setPeekRect(null);
-  };
-
-  const dayItems = useMemo(() => {
-    if (!selectedDate) return [];
-    return planItems
-      .filter((i) => i.date?.slice(0, 10) === selectedDate && i.start_time)
-      .sort((a, b) => timeToMin(a.start_time!) - timeToMin(b.start_time!));
-  }, [planItems, selectedDate]);
-
-  const dayNumber = useMemo(() => {
-    if (!selectedDate || planItems.length === 0) return 1;
-    const item = planItems.find((i) => i.date?.slice(0, 10) === selectedDate);
-    return item?.day_number ?? 1;
-  }, [planItems, selectedDate]);
-
-  const stats = useMemo(() => {
-    const count = dayItems.length;
-    const totalMin = dayItems.reduce((s, i) => {
-      if (i.duration_minutes) return s + i.duration_minutes;
-      if (i.start_time && i.end_time) return s + (timeToMin(i.end_time) - timeToMin(i.start_time));
-      return s;
-    }, 0);
-    const totalCost = dayItems.reduce((s, i) => s + (i.cost_estimate ?? 0), 0);
-    return { count, totalMin, totalCost };
-  }, [dayItems]);
+  }, []);
 
   const LAT = tripPlan?.destination_latitude ?? 34.0522;
   const LNG = tripPlan?.destination_longitude ?? -118.2437;
   const TIMEZONE = tripPlan?.destination_timezone ?? 'America/Los_Angeles';
-  const weatherSegments: WeatherSegment[] = [];
+  const weatherSegments = EMPTY_WEATHER_SEGMENTS;
 
+  const tripStartDate = tripPlan?.start_date;
+  const tripEndDate = tripPlan?.end_date;
   const tripDays = useMemo(() => {
-    if (!tripPlan?.start_date || !tripPlan?.end_date) {
-      return selectedDate ? [selectedDate] : [];
+    if (!tripStartDate || !tripEndDate) {
+      return [];
     }
-    const start = new Date(tripPlan.start_date + 'T00:00:00');
-    const end = new Date(tripPlan.end_date + 'T00:00:00');
+    const start = new Date(tripStartDate + 'T00:00:00');
+    const end = new Date(tripEndDate + 'T00:00:00');
     const days: string[] = [];
     const cur = new Date(start);
     while (cur <= end) {
@@ -142,15 +109,9 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
       cur.setDate(cur.getDate() + 1);
     }
     return days;
-  }, [tripPlan?.start_date, tripPlan?.end_date, selectedDate]);
+  }, [tripStartDate, tripEndDate]);
 
-  const selectedDayIndex = useMemo(() => {
-    if (!selectedDate) return 0;
-    const idx = tripDays.indexOf(selectedDate);
-    return idx < 0 ? 0 : idx;
-  }, [tripDays, selectedDate]);
-
-  const buildRailGradient = (date: string) => {
+  const buildRailGradient = useCallback((date: string) => {
     const st = getSunTimes(date, LAT, LNG, TIMEZONE);
     const { astronomicalDawnMin, dawnMin, sunriseMin, solarNoonMin, sunsetMin, duskMin, astronomicalDuskMin } = st;
     const stops: string[] = [];
@@ -167,12 +128,12 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     add(minToPercent(astronomicalDuskMin), 'rgba(22,24,56,0.85)');
     add(100, 'rgba(6,10,28,0.9)');
     return `linear-gradient(90deg, ${stops.join(', ')})`;
-  };
+  }, [LAT, LNG, TIMEZONE]);
 
   const railGradient = useMemo(() => {
     if (!selectedDate) return 'transparent';
     return buildRailGradient(selectedDate);
-  }, [selectedDate, LAT, LNG, TIMEZONE]);
+  }, [selectedDate, buildRailGradient]);
 
   const skyViewportRef = useRef<HTMLDivElement>(null);
   const pillsViewportRef = useRef<HTMLDivElement>(null);
@@ -188,22 +149,28 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
   const animTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useLayoutEffect(() => {
+    if (!selectedDate) return;
+
     const measure = () => {
       if (skyViewportRef.current) setSkyViewportWidth(skyViewportRef.current.offsetWidth);
       if (pillsViewportRef.current) setPillsViewportWidth(pillsViewportRef.current.offsetWidth);
     };
+
     measure();
+
+    const raf = requestAnimationFrame(measure);
+
     const ro = new ResizeObserver(measure);
     if (skyViewportRef.current) ro.observe(skyViewportRef.current);
     if (pillsViewportRef.current) ro.observe(pillsViewportRef.current);
-    window.addEventListener('resize', measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-    };
-  }, []);
 
-  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [selectedDate]);
+
+  useLayoutEffect(() => {
     const prev = prevDateRef.current;
     if (!selectedDate || prev === selectedDate) return;
     if (prev) {
@@ -212,7 +179,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
       if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
       animTimeoutRef.current = setTimeout(() => {
         setAnimState({ kind: 'idle', current: selectedDate });
-      }, 400);
+      }, 440);
     } else {
       setAnimState({ kind: 'idle', current: selectedDate });
     }
@@ -248,23 +215,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     return { initial: { x: -viewportWidth }, animate: { x: 0 } };
   }
 
-  const addSlots = useMemo(() => {
-    if (dayItems.length === 0) return [] as { midMin: number; label: string }[];
-    const slots: { midMin: number; label: string }[] = [];
-    const sorted = [...dayItems].sort((a, b) => timeToMin(a.start_time!) - timeToMin(b.start_time!));
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const curEnd = sorted[i].end_time
-        ? timeToMin(sorted[i].end_time!)
-        : timeToMin(sorted[i].start_time!) + (sorted[i].duration_minutes ?? 60);
-      const nextStart = timeToMin(sorted[i + 1].start_time!);
-      const gapMin = nextStart - curEnd;
-      if (gapMin >= 30) {
-        slots.push({ midMin: curEnd + gapMin / 2, label: `${curEnd}` });
-      }
-    }
-    return slots;
-  }, [dayItems]);
-
   const pillsByDay = useMemo(() => {
     const map: Record<string, PlanItem[]> = {};
     for (const d of tripDays) map[d] = [];
@@ -291,102 +241,13 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     const h = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10) % 24;
     const m = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
     return ((h * 60 + m) / DAY_MINUTES) * 100;
-  }, [selectedDate]);
+  }, [selectedDate, TIMEZONE]);
 
-  const gaps = useMemo(() => {
-    if (dayItems.length === 0) return [];
-    const result: { startMin: number; endMin: number; durationMin: number }[] = [];
-    const firstStart = timeToMin(dayItems[0].start_time!);
-    if (firstStart - SUNRISE_MIN >= GAP_THRESHOLD_MIN) {
-      result.push({ startMin: SUNRISE_MIN, endMin: firstStart, durationMin: firstStart - SUNRISE_MIN });
-    }
-    for (let i = 0; i < dayItems.length - 1; i++) {
-      const curEnd = dayItems[i].end_time
-        ? timeToMin(dayItems[i].end_time!)
-        : timeToMin(dayItems[i].start_time!) + (dayItems[i].duration_minutes ?? 60);
-      const nextStart = timeToMin(dayItems[i + 1].start_time!);
-      if (nextStart - curEnd >= GAP_THRESHOLD_MIN) {
-        result.push({ startMin: curEnd, endMin: nextStart, durationMin: nextStart - curEnd });
-      }
-    }
-    return result;
-  }, [dayItems]);
-
-  const renderPillsForDay = (date: string) => {
+  const renderPillsForDay = useCallback((date: string) => {
     const dayPills = pillsByDay[date] ?? [];
-    const daySlots: { midMin: number }[] = [];
-    if (dayPills.length >= 2) {
-      const sorted = [...dayPills].sort((a, b) => timeToMin(a.start_time!) - timeToMin(b.start_time!));
-      for (let i = 0; i < sorted.length - 1; i++) {
-        const curEnd = sorted[i].end_time
-          ? timeToMin(sorted[i].end_time!)
-          : timeToMin(sorted[i].start_time!) + (sorted[i].duration_minutes ?? 60);
-        const nextStart = timeToMin(sorted[i + 1].start_time!);
-        const gapMin = nextStart - curEnd;
-        if (gapMin >= 30) daySlots.push({ midMin: curEnd + gapMin / 2 });
-      }
-    }
 
     return (
       <>
-        {daySlots.map((slot, i) => (
-          <button
-            key={`add-${date}-${i}`}
-            onClick={() => {
-              const startH = Math.floor(slot.midMin / 60);
-              const startM = slot.midMin % 60;
-              setPrefillStart(`${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}`);
-              setPrefillDuration(60);
-              setAddDialogOpen(true);
-            }}
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: `${(slot.midMin / DAY_MINUTES) * 100}%`,
-              transform: 'translate(-50%, -50%)',
-              width: 22,
-              height: 22,
-              borderRadius: '50%',
-              background: 'rgba(12,15,22,0.9)',
-              border: '1.5px solid rgba(6,182,212,0.7)',
-              color: 'rgb(6,182,212)',
-              fontSize: 16,
-              fontWeight: 400,
-              lineHeight: 1,
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              backdropFilter: 'blur(6px)',
-              WebkitBackdropFilter: 'blur(6px)',
-              boxShadow: '0 0 8px rgba(6,182,212,0.35), 0 2px 6px rgba(0,0,0,0.4)',
-              zIndex: 4,
-              transition: 'all 180ms cubic-bezier(0.22, 1, 0.36, 1)',
-            }}
-            onMouseEnter={(e) => {
-              const el = e.currentTarget as HTMLButtonElement;
-              el.style.width = '26px';
-              el.style.height = '26px';
-              el.style.background = 'rgba(245,158,11,0.15)';
-              el.style.border = '1.5px solid rgba(245,158,11,0.9)';
-              el.style.color = 'rgb(245,158,11)';
-              el.style.boxShadow = 'inset 0 0 8px rgba(245,158,11,0.25), 0 0 14px rgba(245,158,11,0.45), 0 2px 8px rgba(0,0,0,0.4)';
-              el.style.transform = 'translate(-50%, -50%) rotate(90deg)';
-            }}
-            onMouseLeave={(e) => {
-              const el = e.currentTarget as HTMLButtonElement;
-              el.style.width = '22px';
-              el.style.height = '22px';
-              el.style.background = 'rgba(12,15,22,0.9)';
-              el.style.border = '1.5px solid rgba(6,182,212,0.7)';
-              el.style.color = 'rgb(6,182,212)';
-              el.style.boxShadow = '0 0 8px rgba(6,182,212,0.35), 0 2px 6px rgba(0,0,0,0.4)';
-              el.style.transform = 'translate(-50%, -50%) rotate(0deg)';
-            }}
-          >+</button>
-        ))}
-
         {dayPills.map((item, idx) => {
           const startMin = timeToMin(item.start_time!);
           const durMin = item.end_time
@@ -395,87 +256,188 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
           const left = (startMin / DAY_MINUTES) * 100;
           const width = Math.max((durMin / DAY_MINUTES) * 100, 2);
           const color = getActivityColor(item.activity_type);
-          const title = (item.title?.length ?? 0) > 22 ? item.title!.slice(0, 22) + '…' : item.title ?? '';
           const Icon = TYPE_ICONS[item.activity_type ?? 'sightseeing'] ?? Landmark;
-          const isNarrow = durMin < 50;
           const isTiny = durMin < 30;
           const itemIdStr = item.id ? String(item.id) : '';
-          const isActive = itemIdStr !== '' && (itemIdStr === hoveredActivityId || expandedActivityIds.has(itemIdStr));
+          const isActive = itemIdStr !== ''
+            && (itemIdStr === hoverExpandedId || itemIdStr === lockedExpandedId)
+            && itemIdStr !== suppressHoverUntilLeaveId;
+          const isNew = itemIdStr !== '' && recentlyAddedIds.has(itemIdStr);
           const priority = item.priority ?? 'flexible';
           const isMustDo = priority === 'must_do';
 
+          const onPillEnter = (e: React.MouseEvent<HTMLElement>) => {
+            if (!itemIdStr) return;
+            if (useUIStore.getState().suppressHoverUntilLeaveId === itemIdStr) return;
+            useUIStore.getState().itineraryScrollHandle?.scrollToElement(itemIdStr);
+            setHoverExpandedId(itemIdStr);
+            schedulePeek(item, e.currentTarget as HTMLElement);
+          };
+          const onPillLeave = () => {
+            if (itemIdStr) {
+              useUIStore.setState((s) => {
+                const patch: Partial<typeof s> = {};
+                if (s.hoverExpandedId === itemIdStr) patch.hoverExpandedId = null;
+                if (s.suppressHoverUntilLeaveId === itemIdStr) patch.suppressHoverUntilLeaveId = null;
+                return patch;
+              });
+            }
+            cancelPeek();
+          };
+          const onPillClick = () => {
+            if (!itemIdStr) return;
+            const store = useUIStore.getState();
+            if (store.lockedExpandedId === itemIdStr) {
+              useUIStore.setState({
+                lockedExpandedId: null,
+                hoverExpandedId: null,
+                suppressHoverUntilLeaveId: itemIdStr,
+              });
+            } else {
+              store.itineraryScrollHandle?.scrollToElement(itemIdStr);
+              useUIStore.setState({
+                lockedExpandedId: itemIdStr,
+                hoverExpandedId: null,
+              });
+            }
+          };
+
           if (isTiny) {
-            return (
+            const tinyStyle: React.CSSProperties = {
+              position: 'absolute',
+              top: '50%',
+              left: `${left}%`,
+              width: isActive ? 18 : 12,
+              height: isActive ? 18 : 12,
+              borderRadius: '50%',
+              background: color,
+              border: `2px solid rgba(12,15,22,0.95)`,
+              boxShadow: `0 0 0 1.5px ${color}, 0 0 12px ${color}99`,
+              cursor: 'pointer',
+              zIndex: 3,
+              transition: 'all 180ms ease',
+            };
+            const tinyKey = item.id ? String(item.id) : `dot-${date}-${idx}`;
+            return isNew ? (
+              <motion.div
+                key={tinyKey}
+                initial={{
+                  opacity: 0,
+                  scale: 0.4,
+                  filter: 'blur(4px)',
+                  rotate: 0,
+                  x: '-50%',
+                  y: '-50%',
+                }}
+                animate={{
+                  opacity: 1,
+                  scale: 1,
+                  filter: 'blur(0px)',
+                  x: '-50%',
+                  y: '-50%',
+                  rotate: [0, -8, 8, -8, 8, -4, 4, 0],
+                }}
+                transition={{
+                  opacity: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+                  scale: { duration: 0.48, ease: [0.22, 1, 0.36, 1] },
+                  filter: { duration: 0.34 },
+                  rotate: {
+                    duration: 0.6,
+                    delay: 0.5,
+                    times: [0, 0.14, 0.28, 0.42, 0.57, 0.71, 0.85, 1],
+                    ease: 'linear',
+                  },
+                }}
+                onClick={onPillClick}
+                onMouseEnter={onPillEnter}
+                onMouseLeave={onPillLeave}
+                style={{ ...tinyStyle, transformOrigin: 'center center' }}
+              />
+            ) : (
               <div
-                key={item.id ? String(item.id) : `dot-${date}-${idx}`}
-                onClick={() => { if (item.id) toggleExpandedActivityId(String(item.id)); }}
-                onMouseEnter={(e) => {
-                  if (item.id) setHoveredActivityId(String(item.id));
-                  schedulePeek(item, e.currentTarget as HTMLElement);
-                }}
-                onMouseLeave={() => {
-                  setHoveredActivityId(null);
-                  cancelPeek();
-                }}
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: `${left}%`,
-                  transform: 'translate(-50%, -50%)',
-                  width: isActive ? 18 : 12,
-                  height: isActive ? 18 : 12,
-                  borderRadius: '50%',
-                  background: color,
-                  border: `2px solid rgba(12,15,22,0.95)`,
-                  boxShadow: `0 0 0 1.5px ${color}, 0 0 12px ${color}99`,
-                  cursor: 'pointer',
-                  zIndex: 3,
-                  transition: 'all 180ms ease',
-                }}
+                key={tinyKey}
+                onClick={onPillClick}
+                onMouseEnter={onPillEnter}
+                onMouseLeave={onPillLeave}
+                style={{ ...tinyStyle, transform: 'translate(-50%, -50%)' }}
               />
             );
           }
 
-          return (
+          const blockStyle: React.CSSProperties = {
+            position: 'absolute',
+            top: '50%',
+            height: isActive ? 40 : 36,
+            left: `${left}%`,
+            minWidth: 40,
+            width: `${Math.max(width, (40 / DAY_MINUTES) * 100 * (DAY_MINUTES / 1440))}%`,
+            background: isActive
+              ? `linear-gradient(180deg, rgba(16,20,30,0.96) 0%, rgba(12,15,22,0.94) 100%)`
+              : `linear-gradient(180deg, rgba(12,15,22,0.94) 0%, rgba(12,15,22,0.88) 100%)`,
+            border: `1.5px solid ${color}`,
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0 6px',
+            boxShadow: [
+              isMustDo ? 'inset 0 0 0 2px rgba(12,15,22,0.95), inset 0 0 0 3px rgba(245,158,11,0.85)' : null,
+              isActive
+                ? `inset 0 1px 0 ${color}, 0 0 0 1px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.5), 0 0 16px ${color}aa`
+                : `inset 0 1px 0 ${color}66, 0 0 0 1px rgba(0,0,0,0.4), 0 2px 10px rgba(0,0,0,0.45), 0 0 10px ${color}55`,
+            ].filter(Boolean).join(', '),
+            cursor: 'pointer',
+            transition: 'height 180ms ease, box-shadow 180ms ease, background 180ms ease',
+          };
+          const blockKey = item.id ? String(item.id) : `block-${date}-${idx}`;
+
+          return isNew ? (
+            <motion.div
+              key={blockKey}
+              initial={{
+                opacity: 0,
+                scale: 0.4,
+                filter: 'blur(4px)',
+                rotate: 0,
+                y: '-50%',
+              }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                filter: 'blur(0px)',
+                y: '-50%',
+                rotate: [0, -8, 8, -8, 8, -4, 4, 0],
+              }}
+              transition={{
+                opacity: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+                scale: { duration: 0.48, ease: [0.22, 1, 0.36, 1] },
+                filter: { duration: 0.34 },
+                rotate: {
+                  duration: 0.6,
+                  delay: 0.5,
+                  times: [0, 0.14, 0.28, 0.42, 0.57, 0.71, 0.85, 1],
+                  ease: 'linear',
+                },
+              }}
+              style={{ ...blockStyle, transformOrigin: 'center center' }}
+              onMouseEnter={onPillEnter}
+              onMouseLeave={onPillLeave}
+              onClick={onPillClick}
+            >
+              <Icon
+                size={20}
+                color={color}
+                strokeWidth={2.2}
+                style={{ flexShrink: 0, filter: `drop-shadow(0 0 3px ${color}80)` }}
+              />
+            </motion.div>
+          ) : (
             <div
-              key={item.id ? String(item.id) : `block-${date}-${idx}`}
-              style={{
-                position: 'absolute',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                height: isActive ? 40 : 36,
-                left: `${left}%`,
-                minWidth: 40,
-                width: `${Math.max(width, (40 / DAY_MINUTES) * 100 * (DAY_MINUTES / 1440))}%`,
-                background: isActive
-                  ? `linear-gradient(180deg, rgba(16,20,30,0.96) 0%, rgba(12,15,22,0.94) 100%)`
-                  : `linear-gradient(180deg, rgba(12,15,22,0.94) 0%, rgba(12,15,22,0.88) 100%)`,
-                border: `1.5px solid ${color}`,
-                borderRadius: 12,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '0 6px',
-                boxShadow: [
-                  isMustDo ? 'inset 0 0 0 2px rgba(12,15,22,0.95), inset 0 0 0 3px rgba(245,158,11,0.85)' : null,
-                  isActive
-                    ? `inset 0 1px 0 ${color}, 0 0 0 1px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.5), 0 0 16px ${color}aa`
-                    : `inset 0 1px 0 ${color}66, 0 0 0 1px rgba(0,0,0,0.4), 0 2px 10px rgba(0,0,0,0.45), 0 0 10px ${color}55`,
-                ].filter(Boolean).join(', '),
-                cursor: 'pointer',
-                transition: 'height 180ms ease, box-shadow 180ms ease, background 180ms ease',
-              }}
-              onMouseEnter={(e) => {
-                if (item.id) setHoveredActivityId(String(item.id));
-                schedulePeek(item, e.currentTarget as HTMLElement);
-              }}
-              onMouseLeave={() => {
-                setHoveredActivityId(null);
-                cancelPeek();
-              }}
-              onClick={() => {
-                if (item.id) toggleExpandedActivityId(String(item.id));
-              }}
+              key={blockKey}
+              style={{ ...blockStyle, transform: 'translateY(-50%)' }}
+              onMouseEnter={onPillEnter}
+              onMouseLeave={onPillLeave}
+              onClick={onPillClick}
             >
               <Icon
                 size={20}
@@ -488,7 +450,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
         })}
       </>
     );
-  };
+  }, [pillsByDay, hoverExpandedId, lockedExpandedId, suppressHoverUntilLeaveId, recentlyAddedIds, setHoverExpandedId, schedulePeek, cancelPeek]);
 
   if (!selectedDate) {
     return (
@@ -551,7 +513,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 key={trackKey}
                 initial={initial}
                 animate={animate}
-                transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.38, ease: [0.3, 0, 0.2, 1], delay: 0.016 }}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -707,7 +669,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 key={trackKey}
                 initial={initial}
                 animate={animate}
-                transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.38, ease: [0.3, 0, 0.2, 1], delay: 0.016 }}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -743,132 +705,127 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
         </div>
       </div>
 
-      {peekItem && peekRect && (() => {
-        const it = peekItem.item;
-        const startMin = timeToMin(it.start_time!);
-        const durMin = it.end_time ? timeToMin(it.end_time) - startMin : it.duration_minutes ?? 60;
-        const hrs = Math.floor(startMin / 60);
-        const mins = startMin % 60;
-        const endMin = startMin + durMin;
-        const eh = Math.floor(endMin / 60);
-        const em = endMin % 60;
-        const fmt = (h: number, m: number) => {
-          const ampm = h >= 12 ? 'PM' : 'AM';
-          const hr12 = h % 12 === 0 ? 12 : h % 12;
-          return `${hr12}:${String(m).padStart(2, '0')} ${ampm}`;
-        };
-        const color = getActivityColor(it.activity_type);
-        const priority = it.priority ?? 'flexible';
-        const isMustDo = priority === 'must_do';
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {peekItem && peekRect && (() => {
+            const it = peekItem.item;
+            const startMin = timeToMin(it.start_time!);
+            const durMin = it.end_time ? timeToMin(it.end_time) - startMin : it.duration_minutes ?? 60;
+            const hrs = Math.floor(startMin / 60);
+            const mins = startMin % 60;
+            const endMin = startMin + durMin;
+            const eh = Math.floor(endMin / 60);
+            const em = endMin % 60;
+            const fmt = (h: number, m: number) => {
+              const ampm = h >= 12 ? 'PM' : 'AM';
+              const hr12 = h % 12 === 0 ? 12 : h % 12;
+              return `${hr12}:${String(m).padStart(2, '0')} ${ampm}`;
+            };
+            const color = getActivityColor(it.activity_type);
+            const priority = it.priority ?? 'flexible';
+            const isMustDo = priority === 'must_do';
+            const costSymbol = it.currency ?? '$';
 
-        const peekLeft = peekRect.pillCenterX;
-        const peekTop = peekRect.pillTopY;
+            const peekLeft = peekRect.pillCenterX;
+            const peekTop = peekRect.pillTopY;
 
-        if (typeof document === 'undefined') return null;
-        return createPortal(
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
-            style={{
-              position: 'fixed',
-              left: peekLeft,
-              top: peekTop - 8,
-              transform: 'translate(-50%, -100%)',
-              minWidth: 200,
-              maxWidth: 260,
-              padding: '10px 12px',
-              background: 'rgba(12,15,22,0.96)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: `1px solid ${color}66`,
-              borderRadius: 10,
-              boxShadow: `0 8px 28px rgba(0,0,0,0.6), 0 0 20px ${color}40`,
-              pointerEvents: 'none',
-              zIndex: 9999,
-              fontFamily: 'var(--font-sora)',
-            }}
-          >
-            <div style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: 8,
-              marginBottom: 6,
-            }}>
-              <span style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: 'rgba(255,255,255,0.96)',
-                lineHeight: 1.3,
-                flex: 1,
-              }}>
-                {it.title}
-              </span>
-              {isMustDo && (
-                <span style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  color: 'rgb(245,158,11)',
-                  background: 'rgba(245,158,11,0.12)',
-                  border: '1px solid rgba(245,158,11,0.35)',
-                  padding: '2px 6px',
-                  borderRadius: 4,
-                  textTransform: 'uppercase',
-                  flexShrink: 0,
-                }}>MUST</span>
-              )}
-            </div>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-              fontSize: 12,
-              fontWeight: 500,
-              fontFamily: 'monospace',
-              color: 'rgba(255,255,255,0.92)',
-            }}>
-              <div>{fmt(hrs, mins)} – {fmt(eh, em)} · {formatDuration(durMin)}</div>
-              {(it.cost_estimate ?? 0) > 0 && (
-                <div>${it.cost_estimate}</div>
-              )}
-              {it.location_name && (
-                <div style={{
+            return (
+              <motion.div
+                key={`peek-${it.id ?? 'item'}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                style={{
+                  position: 'fixed',
+                  left: peekLeft,
+                  top: peekTop - 8,
+                  transform: 'translate(-50%, -100%)',
+                  minWidth: 200,
+                  maxWidth: 260,
+                  padding: '10px 12px',
+                  background: 'rgba(12,15,22,0.96)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  border: `1px solid ${color}66`,
+                  borderRadius: 10,
+                  boxShadow: `0 8px 28px rgba(0,0,0,0.6), 0 0 20px ${color}40`,
+                  pointerEvents: 'none',
+                  zIndex: 9999,
                   fontFamily: 'var(--font-sora)',
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 8,
+                  marginBottom: 6,
+                }}>
+                  <span style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: 'rgba(255,255,255,0.96)',
+                    lineHeight: 1.3,
+                    flex: 1,
+                  }}>
+                    {it.title}
+                  </span>
+                  {isMustDo && (
+                    <span style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      color: 'rgb(245,158,11)',
+                      background: 'rgba(245,158,11,0.12)',
+                      border: '1px solid rgba(245,158,11,0.35)',
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                      textTransform: 'uppercase',
+                      flexShrink: 0,
+                    }}>MUST</span>
+                  )}
+                </div>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
                   fontSize: 12,
                   fontWeight: 500,
-                  color: 'rgba(255,255,255,0.7)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>{it.location_name}</div>
-              )}
-            </div>
-            <div style={{
-              position: 'absolute',
-              bottom: -5,
-              left: '50%',
-              transform: 'translateX(-50%) rotate(45deg)',
-              width: 10,
-              height: 10,
-              background: 'rgba(12,15,22,0.96)',
-              borderRight: `1px solid ${color}66`,
-              borderBottom: `1px solid ${color}66`,
-            }} />
-          </motion.div>,
-          document.body
-        );
-      })()}
-
-      {selectedDate && (
-        <AddActivityDialog
-          open={addDialogOpen}
-          onClose={() => setAddDialogOpen(false)}
-          selectedDate={selectedDate}
-          prefillStartTime={prefillStart}
-          prefillDurationMinutes={prefillDuration}
-        />
+                  fontFamily: 'monospace',
+                  color: 'rgba(255,255,255,0.92)',
+                }}>
+                  <div>{fmt(hrs, mins)} – {fmt(eh, em)} · {formatDuration(durMin)}</div>
+                  {(it.cost_estimate ?? 0) > 0 && (
+                    <div>{costSymbol}{it.cost_estimate}</div>
+                  )}
+                  {it.location_name && (
+                    <div style={{
+                      fontFamily: 'var(--font-sora)',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: 'rgba(255,255,255,0.7)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>{it.location_name}</div>
+                  )}
+                </div>
+                <div style={{
+                  position: 'absolute',
+                  bottom: -5,
+                  left: '50%',
+                  transform: 'translateX(-50%) rotate(45deg)',
+                  width: 10,
+                  height: 10,
+                  background: 'rgba(12,15,22,0.96)',
+                  borderRight: `1px solid ${color}66`,
+                  borderBottom: `1px solid ${color}66`,
+                }} />
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>,
+        document.body
       )}
 
     </div>

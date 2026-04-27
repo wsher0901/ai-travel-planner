@@ -1,10 +1,13 @@
 'use client'
 
 import { useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { Map, Footprints } from 'lucide-react'
 import { useTripStore } from '@/store/tripStore'
 import { useUIStore } from '@/store/uiStore'
 import { getActivityColor } from '@/lib/activityColors'
+
+// TODO(phase-2): integrate @googlemaps/js-api-loader for real pins
 
 function formatTime(t: string) {
   const [h, m] = t.split(':').map(Number)
@@ -20,10 +23,11 @@ export default function MapTab() {
   const dayItems = useMemo(() => {
     if (!selectedDate) return []
     return planItems
-      .filter(item => item.date === selectedDate)
+      // Normalize date to YYYY-MM-DD for consistent comparison across tabs
+      .filter(item => item.date?.slice(0, 10) === selectedDate)
       .sort((a, b) => {
         if (a.start_time && b.start_time) return a.start_time.localeCompare(b.start_time)
-        return a.sort_order - b.sort_order
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0)
       })
   }, [planItems, selectedDate])
 
@@ -64,14 +68,14 @@ export default function MapTab() {
           </span>
         </div>
 
-        {/* Faux pins */}
+        {/* Faux pins — clamped to percentage-based positions so they stay in bounds */}
         {fauxPins.map((item, idx) => (
           <div
             key={item.id}
             style={{
               position: 'absolute',
-              left: idx * 100 + 80,
-              top: idx * 60 + 60,
+              left: `${10 + idx * 15}%`,
+              top: `${15 + idx * 12}%`,
               width: 24, height: 24, borderRadius: '50%',
               backgroundColor: getActivityColor(item.activity_type),
               border: '2px solid rgba(12,15,22,0.8)',
@@ -150,10 +154,9 @@ export default function MapTab() {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {dayItems.map((item, idx) => (
                 <div key={item.id}>
-                  <div
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background-color 150ms' }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(6,182,212,0.06)' }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent' }}
+                  <motion.div
+                    whileHover={{ backgroundColor: 'rgba(6,182,212,0.06)' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer' }}
                   >
                     <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, backgroundColor: 'rgba(6,182,212,0.12)', border: '1px solid rgba(6,182,212,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <span style={{ fontFamily: 'var(--font-sora)', fontSize: 11, fontWeight: 700, color: 'rgb(6,182,212)' }}>{idx + 1}</span>
@@ -169,7 +172,7 @@ export default function MapTab() {
                     {idx < dayItems.length - 1 && (
                       <span style={{ fontFamily: 'var(--font-sora)', fontSize: 14, color: 'rgba(255,255,255,0.25)', flexShrink: 0 }}>→</span>
                     )}
-                  </div>
+                  </motion.div>
                   {idx < dayItems.length - 1 && (
                     <div style={{ margin: '2px 0 2px 32px', display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.35)' }}>
                       <Footprints size={10} />

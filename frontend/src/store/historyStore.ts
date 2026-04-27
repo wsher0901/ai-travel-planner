@@ -26,7 +26,7 @@ export interface PlanEvent {
   created_at: string;
 }
 
-interface HistoryStore {
+export interface HistoryState {
   events: PlanEvent[];
   loading: boolean;
   recordEvent: (args: {
@@ -43,7 +43,7 @@ interface HistoryStore {
   clearEvents: () => void;
 }
 
-export const useHistoryStore = create<HistoryStore>((set) => ({
+export const useHistoryStore = create<HistoryState>((set) => ({
   events: [],
   loading: false,
 
@@ -78,25 +78,32 @@ export const useHistoryStore = create<HistoryStore>((set) => ({
       return;
     }
 
-    set((state) => ({ events: [data as PlanEvent, ...state.events] }));
+    // Null-check before prepending — skip if insert returned no data.
+    if (data) {
+      set((state) => ({ events: [data as PlanEvent, ...state.events] }));
+    }
   },
 
   loadEventsForTrip: async (tripPlanId: string) => {
-    set({ loading: true });
+    // Reset events and mark loading atomically.
+    set({ loading: true, events: [] });
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from('plan_events')
-      .select('*')
-      .eq('trip_plan_id', tripPlanId)
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('plan_events')
+        .select('*')
+        .eq('trip_plan_id', tripPlanId)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('[historyStore] failed to load events:', error);
+      if (error) {
+        console.error('[historyStore] failed to load events:', error);
+        return;
+      }
+
+      set({ events: (data as PlanEvent[]) ?? [] });
+    } finally {
       set({ loading: false });
-      return;
     }
-
-    set({ events: (data as PlanEvent[]) ?? [], loading: false });
   },
 
   clearEvents: () => set({ events: [] }),

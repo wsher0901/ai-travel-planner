@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import { TripPlan, PlanItem } from '@/store/tripStore'
 
 interface TripSummaryPanelProps {
@@ -25,6 +26,7 @@ function getCurrencySymbol(code: string) {
 function formatDateRange(start: string, end: string) {
   const startDate = new Date(start + 'T00:00:00')
   const endDate = new Date(end + 'T00:00:00')
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return '—'
   const diffDays = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
   const fmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
   return `${fmt.format(startDate)} – ${fmt.format(endDate)} · ${diffDays} day${diffDays !== 1 ? 's' : ''}`
@@ -123,8 +125,9 @@ export default function TripSummaryPanel({ tripPlan, planItems, onScoreClick }: 
       {/* Score badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         {/* Circular badge */}
-        <div
+        <motion.div
           onClick={onScoreClick}
+          whileHover={{ boxShadow: '0 0 24px rgba(245,158,11,0.3)' }}
           style={{
             width: 68,
             height: 68,
@@ -133,13 +136,6 @@ export default function TripSummaryPanel({ tripPlan, planItems, onScoreClick }: 
             position: 'relative',
             cursor: 'pointer',
             background: `conic-gradient(rgb(245,158,11) 0deg ${scoreAngle}deg, rgba(245,158,11,0.08) ${scoreAngle}deg 360deg)`,
-            transition: 'box-shadow 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLDivElement).style.boxShadow = '0 0 24px rgba(245,158,11,0.3)'
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'
           }}
         >
           <div
@@ -158,7 +154,7 @@ export default function TripSummaryPanel({ tripPlan, planItems, onScoreClick }: 
               {score}
             </span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Score labels */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -168,12 +164,24 @@ export default function TripSummaryPanel({ tripPlan, planItems, onScoreClick }: 
           <span style={{ fontFamily: 'var(--font-sora)', fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
             {score} / 100
           </span>
-          <span
+          <button
+            type="button"
             onClick={onScoreClick}
-            style={{ fontFamily: 'var(--font-sora)', fontSize: 11, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onScoreClick() } }}
+            style={{
+              fontFamily: 'var(--font-sora)',
+              fontSize: 11,
+              color: 'rgba(255,255,255,0.4)',
+              cursor: 'pointer',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              textAlign: 'left',
+            }}
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500/60 focus-visible:rounded"
           >
             View details →
-          </span>
+          </button>
         </div>
       </div>
     </div>

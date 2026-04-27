@@ -20,7 +20,6 @@ function valueLabel(value: number, labels: [string, string, string, string, stri
 export default function SliderPanel() {
   const sliders = useChatStore((s) => s.sliders)
   const setSlider = useChatStore((s) => s.setSlider)
-  const accentColor = ACCENT_COLOR
 
   return (
     <div
@@ -33,85 +32,92 @@ export default function SliderPanel() {
         WebkitBackdropFilter: 'blur(12px)',
       }}
     >
-      {SLIDER_CONFIG.map(({ key, label, labels }, i) => (
-        <div
-          key={key}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: i < SLIDER_CONFIG.length - 1 ? '16px' : 0,
-          }}
-        >
-          <span
+      {SLIDER_CONFIG.map(({ key, label, labels }, i) => {
+        // Map store value (0–100) to slider display value (0–4)
+        const displayValue = Math.round((sliders[key] / 100) * 4)
+        const currentLabel = valueLabel(displayValue, labels)
+        return (
+          <div
+            key={key}
             style={{
-              width: '72px',
-              flexShrink: 0,
-              fontSize: '12px',
-              color: 'rgba(255,255,255,0.45)',
-              fontFamily: 'var(--font-sora)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: i < SLIDER_CONFIG.length - 1 ? '16px' : 0,
             }}
           >
-            {label}
-          </span>
-
-          <Slider.Root
-            style={{ position: 'relative', display: 'flex', flex: 1, alignItems: 'center', touchAction: 'none', userSelect: 'none', height: '20px' }}
-            value={[sliders[key]]}
-            onValueChange={([v]) => setSlider(key, v)}
-            min={0}
-            max={4}
-            step={1}
-          >
-            <Slider.Track
+            <span
               style={{
-                position: 'relative',
-                flex: 1,
-                height: '3px',
-                borderRadius: '2px',
-                background: 'rgba(255,255,255,0.1)',
+                width: '72px',
+                flexShrink: 0,
+                fontSize: '12px',
+                color: 'rgba(255,255,255,0.45)',
+                fontFamily: 'var(--font-sora)',
               }}
             >
-              <Slider.Range
+              {label}
+            </span>
+
+            <Slider.Root
+              aria-label={label}
+              style={{ position: 'relative', display: 'flex', flex: 1, alignItems: 'center', touchAction: 'none', userSelect: 'none', height: '20px' }}
+              value={[displayValue]}
+              onValueChange={([v]) => setSlider(key, Math.round((v / 4) * 100))}
+              min={0}
+              max={4}
+              step={1}
+            >
+              <Slider.Track
                 style={{
-                  position: 'absolute',
-                  height: '100%',
+                  position: 'relative',
+                  flex: 1,
+                  height: '3px',
                   borderRadius: '2px',
-                  backgroundColor: accentColor,
+                  background: 'rgba(255,255,255,0.1)',
+                }}
+              >
+                <Slider.Range
+                  style={{
+                    position: 'absolute',
+                    height: '100%',
+                    borderRadius: '2px',
+                    backgroundColor: ACCENT_COLOR,
+                  }}
+                />
+              </Slider.Track>
+              <Slider.Thumb
+                aria-valuetext={currentLabel}
+                style={{
+                  display: 'block',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: 'white',
+                  border: `2px solid ${ACCENT_COLOR}`,
+                  cursor: 'pointer',
+                  outline: 'none',
+                  boxShadow: 'none',
+                  WebkitAppearance: 'none',
                 }}
               />
-            </Slider.Track>
-            <Slider.Thumb
-              style={{
-                display: 'block',
-                width: '14px',
-                height: '14px',
-                borderRadius: '50%',
-                background: 'white',
-                border: `2px solid ${accentColor}`,
-                cursor: 'pointer',
-                outline: 'none',
-                boxShadow: 'none',
-                WebkitAppearance: 'none',
-              }}
-            />
-          </Slider.Root>
+            </Slider.Root>
 
-          <span
-            style={{
-              minWidth: '120px',
-              fontSize: '12px',
-              color: accentColor,
-              fontFamily: 'var(--font-sora)',
-              textAlign: 'right',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            {valueLabel(sliders[key], labels)}
-          </span>
-        </div>
-      ))}
+            <span
+              style={{
+                minWidth: '120px',
+                fontSize: '12px',
+                color: ACCENT_COLOR,
+                fontFamily: 'var(--font-sora)',
+                textAlign: 'right',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              {currentLabel}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -3,10 +3,36 @@ import { type SunTimes, minToPercent } from '@/lib/sunPosition';
 
 interface Props { sunTimes: SunTimes; }
 
+/** NaN guard: replace NaN/Infinity with fallback minutes */
+function safeMin(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
 export default function SkyGradient({ sunTimes }: Props) {
-  const { astronomicalDawnMin, dawnMin, sunriseMin, solarNoonMin, sunsetMin, duskMin, astronomicalDuskMin } = sunTimes;
-  const stops: string[] = [];
-  const add = (pct: number, color: string) => stops.push(`${color} ${Math.max(0, Math.min(100, pct)).toFixed(2)}%`);
+  const {
+    astronomicalDawnMin: rawAstroD,
+    dawnMin: rawDawn,
+    sunriseMin: rawRise,
+    solarNoonMin: rawNoon,
+    sunsetMin: rawSet,
+    duskMin: rawDusk,
+    astronomicalDuskMin: rawAstroK,
+  } = sunTimes;
+
+  // Apply NaN guards with sensible defaults (typical mid-latitude day)
+  const astronomicalDawnMin = safeMin(rawAstroD, 330);  // ~5:30 AM
+  const dawnMin            = safeMin(rawDawn,  360);    // ~6:00 AM
+  const sunriseMin         = safeMin(rawRise,  390);    // ~6:30 AM
+  const solarNoonMin       = safeMin(rawNoon,  720);    // 12:00 PM
+  const sunsetMin          = safeMin(rawSet,  1110);    // ~6:30 PM
+  const duskMin            = safeMin(rawDusk, 1140);    // ~7:00 PM
+  const astronomicalDuskMin = safeMin(rawAstroK, 1170); // ~7:30 PM
+
+  const rawStops: Array<[number, string]> = [];
+  const add = (pct: number, color: string) => {
+    const clamped = Math.max(0, Math.min(100, pct));
+    rawStops.push([clamped, color]);
+  };
 
   add(0, '#040714');
   add(minToPercent(astronomicalDawnMin) - 2, '#080f28');
@@ -28,6 +54,10 @@ export default function SkyGradient({ sunTimes }: Props) {
   add(minToPercent(duskMin) + 1, '#3a2048');
   add(minToPercent(astronomicalDuskMin), '#161838');
   add(100, '#060a1c');
+
+  // Sort stops by percentage to guarantee valid CSS linear-gradient output
+  rawStops.sort((a, b) => a[0] - b[0]);
+  const stops = rawStops.map(([pct, color]) => `${color} ${pct.toFixed(2)}%`);
 
   return (
     <div style={{

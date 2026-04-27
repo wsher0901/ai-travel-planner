@@ -1,3 +1,8 @@
+/**
+ * Sheet — a Dialog-based slide-in panel primitive.
+ * Uses Radix UI Dialog under the hood (for correct focus-trap and aria semantics)
+ * but renders as a side-anchored sheet via `data-side` CSS variants.
+ */
 "use client"
 
 import * as React from "react"

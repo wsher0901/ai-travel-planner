@@ -1,4 +1,5 @@
 'use client';
+import { useId } from 'react';
 
 interface Props {
   leftPercent: number;
@@ -18,7 +19,9 @@ const TINTS = {
 
 export default function Cloud({ leftPercent, topPx, width = 95, tint = 'neutral', opacity = 1, driftDelay = 0 }: Props) {
   const c = TINTS[tint];
-  const gid = `sky-cloud-${tint}-${Math.round(leftPercent * 10)}-${topPx}`;
+  // Use React.useId() to avoid SVG gradient id collisions across multiple Cloud instances
+  const uid = useId().replace(/:/g, '-');
+  const gid = `sky-cloud-${uid}`;
   const h = width * 0.42;
   return (
     <div style={{ position: 'absolute', left: `${leftPercent}%`, top: topPx, zIndex: 5, opacity, pointerEvents: 'none', animation: 'skyDrift 10s ease-in-out infinite', animationDelay: `${driftDelay}s` }}>

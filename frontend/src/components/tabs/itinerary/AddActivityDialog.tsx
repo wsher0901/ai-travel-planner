@@ -3,13 +3,13 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate, type PanInfo, type MotionValue } from 'framer-motion';
 import {
-  X, Check, MapPin, Info, AlertTriangle, Sparkles,
+  X, Check, MapPin, Info, AlertTriangle, Sparkles, Loader2,
   Moon, Sun, Sunrise, Sunset,
   Plane, BedDouble, UtensilsCrossed, Landmark, Ticket,
-  Mountain, Martini, ShoppingBag, Flower2, TreePine,
+  Mountain, TreePine, ShoppingBag, GlassWater, Flower2,
   type LucideIcon,
 } from 'lucide-react';
-import { useTripStore } from '@/store/tripStore';
+import { useTripStore, type PlanItem } from '@/store/tripStore';
 import { getActivityColor } from '@/lib/activityColors';
 
 interface Props {
@@ -20,38 +20,34 @@ interface Props {
   prefillDurationMinutes?: number;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- spec contract: order + values must match backend enum
-const ACTIVITY_TYPES = [
-  'sightseeing', 'food', 'entertainment', 'outdoor', 'nature',
-  'shopping', 'nightlife', 'wellness', 'transport', 'accommodation',
-] as const;
-
-type ActivityTypeEnum = typeof ACTIVITY_TYPES[number];
+type ActivityTypeEnum =
+  | 'sightseeing' | 'food' | 'entertainment' | 'outdoor' | 'nature'
+  | 'shopping' | 'nightlife' | 'wellness' | 'transport' | 'accommodation';
 
 const TYPE_ICONS: Record<ActivityTypeEnum, LucideIcon> = {
-  transport: Plane,
-  accommodation: BedDouble,
-  food: UtensilsCrossed,
-  sightseeing: Landmark,
+  sightseeing:   Landmark,
+  food:          UtensilsCrossed,
   entertainment: Ticket,
-  outdoor: Mountain,
-  nightlife: Martini,
-  shopping: ShoppingBag,
-  wellness: Flower2,
-  nature: TreePine,
+  outdoor:       Mountain,
+  nature:        TreePine,
+  shopping:      ShoppingBag,
+  nightlife:     GlassWater,
+  wellness:      Flower2,
+  transport:     Plane,
+  accommodation: BedDouble,
 };
 
 const TYPE_META: { value: ActivityTypeEnum; label: string; desc: string }[] = [
-  { value: 'sightseeing',    label: 'Sights',    desc: 'Landmarks & tours' },
-  { value: 'food',           label: 'Food',      desc: 'Meals & tastings' },
-  { value: 'entertainment',  label: 'Shows',     desc: 'Entertainment & events' },
-  { value: 'outdoor',        label: 'Outdoor',   desc: 'Active adventures' },
-  { value: 'nature',         label: 'Nature',    desc: 'Parks & scenery' },
-  { value: 'shopping',       label: 'Shopping',  desc: 'Markets & boutiques' },
-  { value: 'nightlife',      label: 'Nightlife', desc: 'Bars & late-night' },
-  { value: 'wellness',       label: 'Wellness',  desc: 'Spa & relaxation' },
-  { value: 'transport',      label: 'Transport', desc: 'Flights & transit' },
-  { value: 'accommodation',  label: 'Stay',      desc: 'Lodging & hotels' },
+  { value: 'sightseeing',   label: 'Sights',    desc: 'Landmarks & tours' },
+  { value: 'food',          label: 'Food',       desc: 'Meals & tastings' },
+  { value: 'entertainment', label: 'Shows',      desc: 'Entertainment & events' },
+  { value: 'outdoor',       label: 'Outdoor',    desc: 'Active adventures' },
+  { value: 'nature',        label: 'Nature',     desc: 'Parks & scenery' },
+  { value: 'shopping',      label: 'Shopping',   desc: 'Markets & boutiques' },
+  { value: 'nightlife',     label: 'Nightlife',  desc: 'Bars & late-night' },
+  { value: 'wellness',      label: 'Wellness',   desc: 'Spa & relaxation' },
+  { value: 'transport',     label: 'Transport',  desc: 'Flights & transit' },
+  { value: 'accommodation', label: 'Stay',       desc: 'Lodging & hotels' },
 ];
 
 const PRIORITIES = ['must_do', 'nice_to_have', 'flexible'] as const;
@@ -69,14 +65,14 @@ const PRIORITY_COLORS: Record<PriorityEnum, string> = {
   flexible: '#A78BFA',
 };
 
-type DurationPreset = '30' | '60' | '120' | '180' | 'custom';
+type DurationPreset = '30' | '60' | '120' | '180';
 
-const DURATION_PRESET_VALUES: Record<Exclude<DurationPreset, 'custom'>, number> = {
+const DURATION_PRESET_VALUES: Record<DurationPreset, number> = {
   '30': 30, '60': 60, '120': 120, '180': 180,
 };
 
 const DURATION_PRESET_LABELS: Record<DurationPreset, string> = {
-  '30': '30m', '60': '1h', '120': '2h', '180': '3h', custom: 'Custom',
+  '30': '30m', '60': '1h', '120': '2h', '180': '3h',
 };
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -139,7 +135,7 @@ function DialIcon({
   return (
     <div style={{
       position: 'absolute', left: '50%', top: '50%', width: 0, height: 0,
-      transform: `rotate(${sliceAngle}deg) translateY(-62px)`,
+      transform: `rotate(${sliceAngle}deg) translateY(-84px)`,
       pointerEvents: 'none',
     }}>
       <motion.div
@@ -160,7 +156,7 @@ function DialIcon({
         />
         <span style={{
           fontSize: 7,
-          fontFamily: 'monospace',
+          fontFamily: 'var(--font-geist-mono)',
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
           fontWeight: 700,
@@ -189,9 +185,9 @@ export default function AddActivityDialog({
   const [submitting, setSubmitting] = useState(false);
 
   const [durationPreset, setDurationPreset] = useState<DurationPreset>('60');
-  const [showCustomDuration, setShowCustomDuration] = useState(false);
   const [hoveredPriority, setHoveredPriority] = useState<PriorityEnum | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [btnHovered, setBtnHovered] = useState(false);
 
   const [tooltipRect, setTooltipRect] = useState<{ left: number; top: number } | null>(null);
@@ -199,6 +195,13 @@ export default function AddActivityDialog({
 
   const addPlanItem = useTripStore((s) => s.addPlanItem);
   const planItems = useTripStore((s) => s.planItems);
+
+  const isMountedRef = useRef(true);
+  const pendingItemRef = useRef<PlanItem | null>(null);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -217,12 +220,15 @@ export default function AddActivityDialog({
   const panStartAngleRef = useRef<number | null>(null);
   const panStartRotationRef = useRef(0);
   const panMovedRef = useRef(false);
+  const dragConsumedRef = useRef(false);
 
-  const hhSpanRef = useRef<HTMLSpanElement>(null);
-  const mmSpanRef = useRef<HTMLSpanElement>(null);
-  const ampmBtnRef = useRef<HTMLButtonElement>(null);
-  const endTimeSpanRef = useRef<HTMLSpanElement>(null);
   const dragStartTimeRef = useRef<string>('09:00');
+  const [editingField, setEditingField] = useState<'hour' | 'minute' | null>(null);
+  const [editBuffer, setEditBuffer] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerRect, setPickerRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  const timeReadoutRef = useRef<HTMLDivElement>(null);
+  const clockBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -234,6 +240,7 @@ export default function AddActivityDialog({
     setCost(0);
     setLocationName('');
     setSubmitSuccess(false);
+    setSubmitError(null);
     setHoveredPriority(null);
     setBtnHovered(false);
     setDragging(false);
@@ -245,10 +252,8 @@ export default function AddActivityDialog({
 
     if (isValidPreset(prefillDurationMinutes)) {
       setDurationPreset(String(prefillDurationMinutes) as DurationPreset);
-      setShowCustomDuration(false);
     } else {
-      setDurationPreset('custom');
-      setShowCustomDuration(true);
+      setDurationPreset('60');
     }
 
     const raf = requestAnimationFrame(() => titleInputRef.current?.focus());
@@ -283,6 +288,7 @@ export default function AddActivityDialog({
   const handleSubmit = useCallback(async () => {
     if (!title.trim() || submitting) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const result = await addPlanItem({
         title: title.trim(),
@@ -296,10 +302,21 @@ export default function AddActivityDialog({
         location_name: locationName || null,
       });
       if (result) {
+        pendingItemRef.current = result;
         setSubmitSuccess(true);
-        await new Promise((r) => setTimeout(r, 400));
-        setSubmitSuccess(false);
-        onClose();
+        await new Promise<void>((r) => {
+          const t = setTimeout(() => { if (isMountedRef.current) r(); else r(); }, 400);
+          // cleanup: if component unmounts before timeout, timer still fires but state updates are no-ops
+          void t;
+        });
+        if (isMountedRef.current) {
+          setSubmitSuccess(false);
+          onClose();
+        }
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setSubmitError(err instanceof Error ? err.message : 'Failed to save activity');
       }
     } finally {
       setSubmitting(false);
@@ -310,6 +327,8 @@ export default function AddActivityDialog({
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (pickerOpen) { e.preventDefault(); setPickerOpen(false); setPickerRect(null); return; }
+        if (editingField) { e.preventDefault(); setEditingField(null); setEditBuffer(''); return; }
         e.preventDefault();
         onClose();
         return;
@@ -342,7 +361,7 @@ export default function AddActivityDialog({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open, submitting, title, handleSubmit, onClose]);
+  }, [open, submitting, title, handleSubmit, onClose, pickerOpen, editingField]);
 
   useEffect(() => {
     return () => {
@@ -373,11 +392,16 @@ export default function AddActivityDialog({
   }, [startTime, trackWidth, dragging, x]);
 
   useEffect(() => {
-    const startMin = timeToMin(startTime);
-    if (startMin + duration > 1440) {
-      setStartTime(minToTime(Math.max(0, 1440 - duration)));
-    }
-  }, [duration, startTime]);
+    // Use functional updater to read current startTime without adding it to deps
+    // (avoids an update loop: duration change → startTime clamp → startTime change → re-run)
+    setStartTime((cur) => {
+      const startMin = timeToMin(cur);
+      if (startMin + duration > 1440) {
+        return minToTime(Math.max(0, 1440 - duration));
+      }
+      return cur;
+    });
+  }, [duration]);
 
   const blockWidthPx = trackWidth > 0 ? (duration / 1440) * trackWidth : 0;
   const maxX = Math.max(0, trackWidth - blockWidthPx);
@@ -409,24 +433,51 @@ export default function AddActivityDialog({
     });
   }, []);
 
+  const openPicker = useCallback(() => {
+    if (!timeReadoutRef.current) return;
+    const rect = timeReadoutRef.current.getBoundingClientRect();
+    setPickerRect({ left: rect.left, top: rect.bottom + 8, width: rect.width });
+    setPickerOpen(true);
+  }, []);
+
+  const closePicker = useCallback(() => {
+    setPickerOpen(false);
+    setPickerRect(null);
+  }, []);
+
+  const commitEdit = useCallback(() => {
+    if (!editingField) return;
+    const num = parseInt(editBuffer, 10);
+    if (!isNaN(num)) {
+      const [h24, m] = startTime.split(':').map(Number);
+      if (editingField === 'hour') {
+        let newH24: number;
+        if (num === 0 || num === 24) {
+          newH24 = 0;
+        } else if (num >= 13 && num <= 23) {
+          newH24 = num;
+        } else {
+          const isPm = h24 >= 12;
+          const clamped = Math.min(12, Math.max(1, num));
+          newH24 = isPm ? (clamped === 12 ? 12 : clamped + 12) : (clamped === 12 ? 0 : clamped);
+        }
+        setStartTime(`${String(newH24).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      } else {
+        const clamped = Math.min(59, Math.max(0, num));
+        setStartTime(`${String(h24).padStart(2, '0')}:${String(clamped).padStart(2, '0')}`);
+      }
+    }
+    setEditingField(null);
+    setEditBuffer('');
+  }, [editingField, editBuffer, startTime]);
+
   const handleDrag = useCallback(() => {
     if (trackWidth === 0) return;
     const pct = Math.max(0, Math.min(1, x.get() / trackWidth));
     const snappedMin = Math.round((pct * 1440) / 5) * 5;
     const clamped = Math.max(0, Math.min(1440 - duration, snappedMin));
     dragStartTimeRef.current = minToTime(clamped);
-
-    const h24v = Math.floor(clamped / 60);
-    const mv = clamped % 60;
-    const isP = h24v >= 12;
-    const h12v = h24v % 12 === 0 ? 12 : h24v % 12;
-    if (hhSpanRef.current) hhSpanRef.current.textContent = String(h12v).padStart(2, '0');
-    if (mmSpanRef.current) mmSpanRef.current.textContent = String(mv).padStart(2, '0');
-    if (ampmBtnRef.current) ampmBtnRef.current.textContent = isP ? 'PM' : 'AM';
-    const endMin = clamped + duration;
-    const eh = Math.floor(endMin / 60) % 24;
-    const em = endMin % 60;
-    if (endTimeSpanRef.current) endTimeSpanRef.current.textContent = formatHour12(`${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`);
+    setStartTime(minToTime(clamped));
   }, [trackWidth, duration, x]);
 
   const handleScrubberKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -458,17 +509,21 @@ export default function AddActivityDialog({
 
   useEffect(() => {
     if (!open) return;
+    if (panning) return; // don't fight active drag
     const target = -(selectedIndex * 36);
     const current = rotation.get();
     const k = Math.round((current - target) / 360);
     const nearest = target + k * 360;
     const controls = animate(rotation, nearest, {
-      type: 'spring',
-      stiffness: 180,
-      damping: 22,
+      type: 'spring', stiffness: 320, damping: 26, mass: 0.8,
     });
     return () => controls.stop();
-  }, [selectedIndex, rotation, open]);
+  }, [selectedIndex, rotation, open, panning]);
+
+  // typeRef lets the wheel handler read current type without being in its dep array,
+  // preventing the handler from being re-registered on every type change.
+  const typeRef = useRef(type);
+  useEffect(() => { typeRef.current = type; }, [type]);
 
   useEffect(() => {
     if (!open) return;
@@ -476,15 +531,16 @@ export default function AddActivityDialog({
     if (!el) return;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
-      const currentIndex = TYPE_META.findIndex((t) => t.value === type);
+      const currentIndex = TYPE_META.findIndex((t) => t.value === typeRef.current);
       if (currentIndex === -1) return;
       const step = e.deltaY > 0 ? 1 : -1;
-      const nextIndex = (currentIndex + step + 10) % 10;
+      const nextIndex = (currentIndex + step + TYPE_META.length) % TYPE_META.length;
       setType(TYPE_META[nextIndex].value);
     };
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
-  }, [open, type]);
+  }, [open]);
+
 
   const handleDialPanStart = (_e: unknown, info: PanInfo) => {
     panStartAngleRef.current = getDialAngle(info.point.x, info.point.y);
@@ -499,31 +555,43 @@ export default function AddActivityDialog({
     let delta = currentAngle - panStartAngleRef.current;
     while (delta > 180) delta -= 360;
     while (delta < -180) delta += 360;
-    if (Math.abs(delta) > 3) panMovedRef.current = true;
+    if (Math.abs(delta) > 3) {
+      panMovedRef.current = true;
+      dragConsumedRef.current = true;
+    }
     rotation.set(panStartRotationRef.current + delta);
   };
 
   const handleDialPanEnd = () => {
-    setPanning(false);
-    if (panStartAngleRef.current === null) return;
+    if (panStartAngleRef.current === null) {
+      setPanning(false);
+      return;
+    }
     panStartAngleRef.current = null;
-    if (!panMovedRef.current) return;
+    panMovedRef.current = false;
+
     const r = rotation.get();
-    const snapped = Math.round(-r / 36);
-    const index = ((snapped % 10) + 10) % 10;
+    const normalized = ((-r % 360) + 360) % 360;
+    const index = Math.round(normalized / 36) % 10;
     const newType = TYPE_META[index].value;
+
+    setPanning(false);
+
     if (newType !== type) {
-      setType(newType);
+      setType(newType); // useEffect on selectedIndex animates rotation
     } else {
+      // Type unchanged — animate rotation manually to exact slice angle.
       const target = -(index * 36);
-      const k = Math.round((rotation.get() - target) / 360);
-      animate(rotation, target + k * 360, { type: 'spring', stiffness: 180, damping: 22 });
+      const k = Math.round((r - target) / 360);
+      animate(rotation, target + k * 360, {
+        type: 'spring', stiffness: 320, damping: 26, mass: 0.8,
+      });
     }
   };
 
   const handleDialClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (panMovedRef.current) {
-      panMovedRef.current = false;
+    if (dragConsumedRef.current) {
+      dragConsumedRef.current = false;
       return;
     }
     const rect = dialRef.current?.getBoundingClientRect();
@@ -533,7 +601,7 @@ export default function AddActivityDialog({
     const dx = e.clientX - cx;
     const dy = e.clientY - cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 26 || dist > 90) return;
+    if (dist < 28 || dist > 122) return;
     let viewAngle = (Math.atan2(dx, -dy) * 180) / Math.PI;
     if (viewAngle < 0) viewAngle += 360;
     const r = ((rotation.get() % 360) + 360) % 360;
@@ -561,8 +629,6 @@ export default function AddActivityDialog({
       setType(TYPE_META[nextIndex].value);
     }
   };
-
-  if (!open) return null;
 
   const selectedTypeColor = getActivityColor(type);
 
@@ -688,7 +754,7 @@ export default function AddActivityDialog({
     e.currentTarget.style.boxShadow = 'none';
   };
 
-  const handleTooltipEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleTooltipEnter = (e: React.FocusEvent<HTMLButtonElement> | React.MouseEvent<HTMLButtonElement>) => {
     const el = e.currentTarget;
     if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
     tooltipTimerRef.current = setTimeout(() => {
@@ -710,7 +776,7 @@ export default function AddActivityDialog({
     const selectedColor = getActivityColor(selectedMeta.value);
     const SelectedIcon = TYPE_ICONS[selectedMeta.value];
 
-    const wedgeR = 88;
+    const wedgeR = 98;
     const half = (18 * Math.PI) / 180;
     const wx1 = -wedgeR * Math.sin(half);
     const wy1 = -wedgeR * Math.cos(half);
@@ -721,9 +787,9 @@ export default function AddActivityDialog({
     return (
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 16,
-        alignItems: 'center',
+        gridTemplateColumns: 'auto 1fr',
+        gap: 22,
+        alignItems: 'start',
         margin: '4px 0',
       }}>
         {/* Dial column */}
@@ -742,8 +808,8 @@ export default function AddActivityDialog({
             onBlur={() => setDialFocused(false)}
             style={{
               position: 'relative',
-              width: 180,
-              height: 180,
+              width: 244,
+              height: 244,
               borderRadius: '50%',
               border: `1px solid ${dialFocused ? 'rgba(6,182,212,0.6)' : 'rgba(6,182,212,0.2)'}`,
               background: 'radial-gradient(circle, rgba(6,182,212,0.07) 0%, transparent 70%)',
@@ -760,9 +826,9 @@ export default function AddActivityDialog({
             {/* Active wedge (fixed at top) */}
             <svg
               aria-hidden
-              width="180"
-              height="180"
-              viewBox="-100 -100 200 200"
+              width="244"
+              height="244"
+              viewBox="-110 -110 220 220"
               style={{
                 position: 'absolute',
                 inset: 0,
@@ -794,15 +860,15 @@ export default function AddActivityDialog({
               {/* Spokes */}
               <svg
                 aria-hidden
-                width="180"
-                height="180"
-                viewBox="-100 -100 200 200"
+                width="244"
+                height="244"
+                viewBox="-110 -110 220 220"
                 style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
               >
                 {Array.from({ length: 10 }).map((_, i) => {
                   const angleRad = ((18 + i * 36) * Math.PI) / 180;
-                  const innerR = 26;
-                  const outerR = 88;
+                  const innerR = 28;
+                  const outerR = 98;
                   const x1 = innerR * Math.sin(angleRad);
                   const y1 = -innerR * Math.cos(angleRad);
                   const x2 = outerR * Math.sin(angleRad);
@@ -833,27 +899,6 @@ export default function AddActivityDialog({
               ))}
             </motion.div>
 
-            {/* Hub */}
-            <motion.div
-              aria-hidden
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: 44,
-                height: 44,
-                borderRadius: '50%',
-                background: 'rgba(6,182,212,0.08)',
-                border: '1px solid rgba(6,182,212,0.3)',
-                boxShadow: 'inset 0 0 12px rgba(6,182,212,0.15), 0 0 16px rgba(6,182,212,0.2)',
-                pointerEvents: 'none',
-                zIndex: 3,
-              }}
-            />
-
             {/* Hub label overlay */}
             <div style={{
               position: 'absolute', left: '50%', top: '50%',
@@ -870,7 +915,7 @@ export default function AddActivityDialog({
                   transition={{ duration: 0.18, ease: 'easeOut' }}
                   style={{
                     fontSize: 8,
-                    fontFamily: 'monospace',
+                    fontFamily: 'var(--font-geist-mono)',
                     letterSpacing: '0.1em',
                     textTransform: 'uppercase',
                     fontWeight: 700,
@@ -921,80 +966,144 @@ export default function AddActivityDialog({
           </div>
         </div>
 
-        {/* Detail card column */}
-        <div style={{
-          width: '100%',
-          aspectRatio: '1 / 1',
-          maxHeight: 180,
-          position: 'relative',
-          borderRadius: 14,
-          padding: 20,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 8,
-          overflow: 'hidden',
-          background: `radial-gradient(circle at center, ${selectedColor}14 0%, transparent 70%)`,
-          border: `1px solid ${selectedColor}40`,
-          boxShadow: `inset 0 0 20px ${selectedColor}10, 0 0 22px ${selectedColor}22`,
-          transition: 'background 300ms ease, border-color 300ms ease, box-shadow 300ms ease',
-        }}>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={type}
-              initial={{ opacity: 0, scale: 0.92 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.92 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <div style={{
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
-                background: `${selectedColor}1a`,
-                border: `1.5px solid ${selectedColor}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: `0 0 16px ${selectedColor}55, inset 0 0 10px ${selectedColor}22`,
-              }}>
-                <SelectedIcon
-                  size={28}
-                  color={selectedColor}
-                  strokeWidth={2}
-                  style={{ filter: `drop-shadow(0 0 4px ${selectedColor}aa)` }}
-                />
-              </div>
-              <div style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: selectedColor,
+        {/* Right column: compact detail card + priority */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Detail card */}
+          <div style={{
+            width: '100%',
+            position: 'relative',
+            borderRadius: 14,
+            padding: 12,
+            minHeight: 206,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 7,
+            overflow: 'hidden',
+            background: `radial-gradient(circle at center, ${selectedColor}14 0%, transparent 70%)`,
+            border: `1px solid ${selectedColor}40`,
+            boxShadow: `inset 0 0 20px ${selectedColor}10, 0 0 22px ${selectedColor}22`,
+            transition: 'background 300ms ease, border-color 300ms ease, box-shadow 300ms ease',
+          }}>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={type}
+                initial={{ opacity: 0, scale: 0.92 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.92 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}
+              >
+                <div style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: '50%',
+                  background: `${selectedColor}1a`,
+                  border: `1.5px solid ${selectedColor}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: `0 0 20px ${selectedColor}55, inset 0 0 12px ${selectedColor}22`,
+                }}>
+                  <SelectedIcon
+                    size={26}
+                    color={selectedColor}
+                    strokeWidth={2}
+                    style={{ filter: `drop-shadow(0 0 5px ${selectedColor}aa)` }}
+                  />
+                </div>
+                <div style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: selectedColor,
+                  fontFamily: 'var(--font-sora)',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                }}>
+                  {selectedMeta.label}
+                </div>
+                <div style={{
+                  fontSize: 11,
+                  fontWeight: 500,
+                  color: 'rgba(255,255,255,0.55)',
+                  fontFamily: 'var(--font-sora)',
+                  textAlign: 'center',
+                  lineHeight: 1.4,
+                }}>
+                  {selectedMeta.desc}
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Priority section */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+              <span style={{
+                fontSize: 10, fontWeight: 600, letterSpacing: '0.12em',
+                color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase',
                 fontFamily: 'var(--font-sora)',
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-              }}>
-                {selectedMeta.label}
-              </div>
-              <div style={{
-                fontSize: 11,
-                fontWeight: 500,
-                color: 'rgba(255,255,255,0.55)',
-                fontFamily: 'var(--font-sora)',
-                textAlign: 'center',
-                maxWidth: 150,
-                lineHeight: 1.4,
-              }}>
-                {selectedMeta.desc}
-              </div>
-            </motion.div>
-          </AnimatePresence>
+              }}>Priority</span>
+              <button
+                type="button"
+                aria-label="Priority info"
+                onMouseEnter={handleTooltipEnter}
+                onMouseLeave={handleTooltipLeave}
+                onFocus={(e) => handleTooltipEnter(e)}
+                onBlur={handleTooltipLeave}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 14, height: 14, padding: 0,
+                  background: 'transparent', border: 'none', cursor: 'help',
+                  color: 'rgba(255,255,255,0.35)',
+                }}
+              >
+                <Info size={11} />
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+              {PRIORITIES.map((p) => {
+                const active = priority === p;
+                const hovered = hoveredPriority === p && !active;
+                const accent = PRIORITY_COLORS[p];
+                const label = PRIORITY_LABELS[p];
+                const background = active ? `${accent}20` : hovered ? `${accent}14` : `${accent}0a`;
+                const borderValue = active ? `1.5px solid ${accent}` : hovered ? `1px solid ${accent}55` : `1px solid ${accent}30`;
+                const color = active ? accent : hovered ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.5)';
+                const boxShadow = active ? `0 0 12px ${accent}50, inset 0 0 8px ${accent}20` : 'none';
+                return (
+                  <motion.button
+                    key={p}
+                    type="button"
+                    onClick={() => setPriority(p)}
+                    onMouseEnter={() => setHoveredPriority(p)}
+                    onMouseLeave={() => setHoveredPriority(null)}
+                    whileTap={{ scale: 0.97 }}
+                    aria-label={label}
+                    aria-pressed={active}
+                    style={{
+                      padding: '6px 0',
+                      borderRadius: 8,
+                      textAlign: 'center',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      letterSpacing: '0.08em',
+                      fontFamily: 'var(--font-sora)',
+                      background,
+                      border: borderValue,
+                      color,
+                      boxShadow,
+                      cursor: 'pointer',
+                      transition: 'background 200ms cubic-bezier(0.22, 1, 0.36, 1), border-color 200ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1)',
+                    }}
+                  >
+                    {label}
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1044,102 +1153,8 @@ export default function AddActivityDialog({
           />
         </div>
 
-        {/* Rotating dial + detail card */}
+        {/* Rotating dial + detail card + priority */}
         {renderTypeDial()}
-
-        {/* Priority row */}
-        <div>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            marginBottom: 6,
-          }}>
-            <span style={{
-              fontSize: 10, fontWeight: 600, letterSpacing: '0.12em',
-              color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase',
-              fontFamily: 'var(--font-sora)',
-            }}>Priority</span>
-            <button
-              type="button"
-              aria-label="Priority info"
-              onMouseEnter={handleTooltipEnter}
-              onMouseLeave={handleTooltipLeave}
-              onFocus={(e) => handleTooltipEnter(e as unknown as React.MouseEvent<HTMLButtonElement>)}
-              onBlur={handleTooltipLeave}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: 14, height: 14, padding: 0,
-                background: 'transparent', border: 'none', cursor: 'help',
-                color: 'rgba(255,255,255,0.35)',
-              }}
-            >
-              <Info size={11} />
-            </button>
-          </div>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 6,
-          }}>
-            {PRIORITIES.map((p) => {
-              const active = priority === p;
-              const hovered = hoveredPriority === p && !active;
-              const accent = PRIORITY_COLORS[p];
-              const label = PRIORITY_LABELS[p];
-
-              const background = active
-                ? `${accent}20`
-                : hovered
-                  ? `${accent}14`
-                  : `${accent}0a`;
-              const borderValue = active
-                ? `1.5px solid ${accent}`
-                : hovered
-                  ? `1px solid ${accent}55`
-                  : `1px solid ${accent}30`;
-              const color = active
-                ? accent
-                : hovered
-                  ? 'rgba(255,255,255,0.85)'
-                  : 'rgba(255,255,255,0.5)';
-              const boxShadow = active
-                ? `0 0 12px ${accent}50, inset 0 0 8px ${accent}20`
-                : 'none';
-
-              return (
-                <motion.button
-                  key={p}
-                  type="button"
-                  onClick={() => setPriority(p)}
-                  onMouseEnter={() => setHoveredPriority(p)}
-                  onMouseLeave={() => setHoveredPriority(null)}
-                  whileTap={{ scale: 0.97 }}
-                  aria-label={label}
-                  aria-pressed={active}
-                  style={{
-                    padding: '10px 0',
-                    borderRadius: 8,
-                    textAlign: 'center',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: '0.08em',
-                    fontFamily: 'var(--font-sora)',
-                    background,
-                    border: borderValue,
-                    color,
-                    boxShadow,
-                    cursor: 'pointer',
-                    transition: 'background 200ms cubic-bezier(0.22, 1, 0.36, 1), border-color 200ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1)',
-                  }}
-                >
-                  {label}
-                </motion.button>
-              );
-            })}
-          </div>
-        </div>
       </div>
     </motion.div>
   );
@@ -1157,203 +1172,305 @@ export default function AddActivityDialog({
         {sectionLabelRow(2, 'When')}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* Row A: full-width time bar */}
+          {/* Time row: start ──── duration ──── end (combined) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-            {/* Custom segmented time picker */}
-            {(() => {
-              const [h24v, mv] = startTime.split(':').map(Number);
-              const isPmv = h24v >= 12;
-              const h12v = h24v % 12 === 0 ? 12 : h24v % 12;
-              return (
+                {/* Start time — interactive readout */}
                 <div
+                  ref={timeReadoutRef}
                   aria-label="Start time"
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 1,
-                    padding: '5px 10px',
-                    borderRadius: 8,
+                    display: 'flex', alignItems: 'baseline', gap: 2,
+                    padding: '6px 10px',
+                    borderRadius: 10,
                     background: 'rgba(255,255,255,0.04)',
                     border: '1px solid rgba(6,182,212,0.32)',
-                    flexShrink: 0,
                     userSelect: 'none',
+                    flexShrink: 0,
+                    position: 'relative',
                   }}
                 >
-                  <span
-                    ref={hhSpanRef}
-                    role="spinbutton"
-                    aria-label="Hour"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'ArrowUp') { e.preventDefault(); updateH12(1); }
-                      if (e.key === 'ArrowDown') { e.preventDefault(); updateH12(-1); }
-                    }}
-                    onWheel={(e) => { e.preventDefault(); updateH12(e.deltaY < 0 ? 1 : -1); }}
-                    style={{
-                      fontSize: 22, fontFamily: 'monospace', fontWeight: 700,
-                      color: 'rgb(245,158,11)', cursor: 'ns-resize', outline: 'none',
-                      minWidth: 26, textAlign: 'center', display: 'inline-block',
-                    }}
-                  >
-                    {String(h12v).padStart(2, '0')}
-                  </span>
+                  {/* Hour — click to inline edit */}
+                  {editingField === 'hour' ? (
+                    <input
+                      autoFocus
+                      value={editBuffer}
+                      onChange={(e) => setEditBuffer(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                      onBlur={commitEdit}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+                        if (e.key === 'Escape') { e.preventDefault(); setEditingField(null); setEditBuffer(''); }
+                        if (e.key === 'Tab' && !e.shiftKey) {
+                          e.preventDefault();
+                          const num = parseInt(editBuffer, 10);
+                          const [h24, m] = startTime.split(':').map(Number);
+                          if (!isNaN(num)) {
+                            let newH24: number;
+                            if (num === 0 || num === 24) {
+                              newH24 = 0;
+                            } else if (num >= 13 && num <= 23) {
+                              newH24 = num;
+                            } else {
+                              const isPm = h24 >= 12;
+                              const clamped = Math.min(12, Math.max(1, num));
+                              newH24 = isPm ? (clamped === 12 ? 12 : clamped + 12) : (clamped === 12 ? 0 : clamped);
+                            }
+                            setStartTime(`${String(newH24).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                          }
+                          setEditBuffer(String(m).padStart(2, '0'));
+                          setEditingField('minute');
+                        }
+                      }}
+                      style={{
+                        fontSize: 32, fontFamily: 'var(--font-geist-mono)', fontWeight: 700,
+                        color: 'rgb(245,158,11)', background: 'transparent',
+                        border: 'none', outline: 'none',
+                        width: 40, minWidth: 40, maxWidth: 40,
+                        height: 32, minHeight: 32, maxHeight: 32,
+                        boxSizing: 'border-box',
+                        textAlign: 'center', padding: 0, margin: 0,
+                        lineHeight: '32px',
+                        verticalAlign: 'baseline',
+                        display: 'inline-block',
+                      }}
+                    />
+                  ) : (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Edit hour"
+                      onClick={() => {
+                        const [h24] = startTime.split(':').map(Number);
+                        const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+                        setEditBuffer(String(h12).padStart(2, '0'));
+                        setEditingField('hour');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          const [h24] = startTime.split(':').map(Number);
+                          const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+                          setEditBuffer(String(h12).padStart(2, '0'));
+                          setEditingField('hour');
+                        }
+                      }}
+                      style={{
+                        fontSize: 32, fontFamily: 'var(--font-geist-mono)', fontWeight: 700,
+                        color: 'rgb(245,158,11)', cursor: 'text', outline: 'none',
+                        width: 40, minWidth: 40, maxWidth: 40,
+                        height: 32, minHeight: 32, maxHeight: 32,
+                        boxSizing: 'border-box',
+                        textAlign: 'center', display: 'inline-block',
+                        lineHeight: '32px',
+                        verticalAlign: 'baseline', padding: 0, margin: 0,
+                        borderRadius: 4,
+                        transition: 'background 150ms ease',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(245,158,11,0.08)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      {(() => {
+                        const [h24] = startTime.split(':').map(Number);
+                        const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+                        return String(h12).padStart(2, '0');
+                      })()}
+                    </span>
+                  )}
+
                   <span style={{
-                    fontSize: 22, fontFamily: 'monospace',
-                    color: 'rgba(245,158,11,0.5)', lineHeight: 1,
-                    paddingBottom: 2,
+                    fontSize: 32,
+                    fontFamily: 'var(--font-geist-mono)',
+                    color: 'rgba(245,158,11,0.45)',
+                    lineHeight: '32px',
+                    display: 'inline-block',
+                    verticalAlign: 'baseline',
+                    padding: 0,
                   }}>:</span>
-                  <span
-                    ref={mmSpanRef}
-                    role="spinbutton"
-                    aria-label="Minute"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'ArrowUp') { e.preventDefault(); updateMinute(5); }
-                      if (e.key === 'ArrowDown') { e.preventDefault(); updateMinute(-5); }
-                    }}
-                    onWheel={(e) => { e.preventDefault(); updateMinute(e.deltaY < 0 ? 5 : -5); }}
-                    style={{
-                      fontSize: 22, fontFamily: 'monospace', fontWeight: 700,
-                      color: 'rgb(245,158,11)', cursor: 'ns-resize', outline: 'none',
-                      minWidth: 26, textAlign: 'center', display: 'inline-block',
-                    }}
-                  >
-                    {String(mv).padStart(2, '0')}
-                  </span>
+
+                  {/* Minute — click to inline edit */}
+                  {editingField === 'minute' ? (
+                    <input
+                      autoFocus
+                      value={editBuffer}
+                      onChange={(e) => setEditBuffer(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                      onBlur={commitEdit}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+                        if (e.key === 'Escape') { e.preventDefault(); setEditingField(null); setEditBuffer(''); }
+                        if (e.key === 'Tab' && e.shiftKey) {
+                          e.preventDefault();
+                          const num = parseInt(editBuffer, 10);
+                          const [h24] = startTime.split(':').map(Number);
+                          if (!isNaN(num)) {
+                            const clamped = Math.min(59, Math.max(0, num));
+                            setStartTime(`${String(h24).padStart(2, '0')}:${String(clamped).padStart(2, '0')}`);
+                          }
+                          const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+                          setEditBuffer(String(h12).padStart(2, '0'));
+                          setEditingField('hour');
+                        }
+                      }}
+                      style={{
+                        fontSize: 32, fontFamily: 'var(--font-geist-mono)', fontWeight: 700,
+                        color: 'rgb(245,158,11)', background: 'transparent',
+                        border: 'none', outline: 'none',
+                        width: 40, minWidth: 40, maxWidth: 40,
+                        height: 32, minHeight: 32, maxHeight: 32,
+                        boxSizing: 'border-box',
+                        textAlign: 'center', padding: 0, margin: 0,
+                        lineHeight: '32px',
+                        verticalAlign: 'baseline',
+                        display: 'inline-block',
+                      }}
+                    />
+                  ) : (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Edit minute"
+                      onClick={() => {
+                        const [, m] = startTime.split(':').map(Number);
+                        setEditBuffer(String(m).padStart(2, '0'));
+                        setEditingField('minute');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          const [, m] = startTime.split(':').map(Number);
+                          setEditBuffer(String(m).padStart(2, '0'));
+                          setEditingField('minute');
+                        }
+                      }}
+                      style={{
+                        fontSize: 32, fontFamily: 'var(--font-geist-mono)', fontWeight: 700,
+                        color: 'rgb(245,158,11)', cursor: 'text', outline: 'none',
+                        width: 40, minWidth: 40, maxWidth: 40,
+                        height: 32, minHeight: 32, maxHeight: 32,
+                        boxSizing: 'border-box',
+                        textAlign: 'center', display: 'inline-block',
+                        lineHeight: '32px',
+                        verticalAlign: 'baseline', padding: 0, margin: 0,
+                        borderRadius: 4,
+                        transition: 'background 150ms ease',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(245,158,11,0.08)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      {startTime.split(':')[1]}
+                    </span>
+                  )}
+
+                  {/* AM/PM toggle */}
                   <button
-                    ref={ampmBtnRef}
                     type="button"
                     onClick={toggleAmPm}
                     style={{
-                      fontSize: 11, fontFamily: 'monospace', fontWeight: 700,
+                      fontSize: 12, fontFamily: 'var(--font-geist-mono)', fontWeight: 700,
                       color: 'rgba(245,158,11,0.75)',
                       background: 'transparent', border: 'none', cursor: 'pointer',
-                      padding: '2px 4px', marginLeft: 3,
+                      padding: '2px 4px', marginLeft: 4,
                       borderRadius: 4, letterSpacing: '0.04em',
-                      lineHeight: 1,
+                      lineHeight: 1, alignSelf: 'flex-end', paddingBottom: 3,
                     }}
                   >
-                    {isPmv ? 'PM' : 'AM'}
+                    {(() => {
+                      const [h24] = startTime.split(':').map(Number);
+                      return h24 >= 12 ? 'PM' : 'AM';
+                    })()}
+                  </button>
+
+                  {/* Clock icon — opens picker popover */}
+                  <button
+                    ref={clockBtnRef}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); pickerOpen ? closePicker() : openPicker(); }}
+                    aria-label="Open time picker"
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 22, height: 22, padding: 0, marginLeft: 6,
+                      background: pickerOpen ? 'rgba(6,182,212,0.15)' : 'transparent',
+                      border: `1px solid ${pickerOpen ? 'rgba(6,182,212,0.6)' : 'rgba(6,182,212,0.25)'}`,
+                      borderRadius: 6,
+                      color: pickerOpen ? 'rgb(6,182,212)' : 'rgba(6,182,212,0.7)',
+                      cursor: 'pointer',
+                      alignSelf: 'center',
+                      transition: 'all 160ms ease',
+                    }}
+                    onMouseEnter={(e) => { if (!pickerOpen) { e.currentTarget.style.background = 'rgba(6,182,212,0.08)'; e.currentTarget.style.color = 'rgb(6,182,212)'; }}}
+                    onMouseLeave={(e) => { if (!pickerOpen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(6,182,212,0.7)'; }}}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
                   </button>
                 </div>
-              );
-            })()}
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
-              <span style={{
-                color: 'rgba(255,255,255,0.5)',
-                fontSize: 12,
-                fontFamily: 'monospace',
-                whiteSpace: 'nowrap',
-                letterSpacing: '0.04em',
-              }}>
-                {formatDuration(duration)}
-              </span>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
-            </div>
-            <span
-              ref={endTimeSpanRef}
-              style={{
-                color: 'rgb(245,158,11)',
-                fontSize: 14,
-                fontWeight: 600,
-                fontFamily: 'monospace',
-                flexShrink: 0,
-              }}
-            >
-              {formatHour12(endTime)}
-            </span>
-          </div>
 
-          {/* Row B: duration chips */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {(['30', '60', '120', '180', 'custom'] as const).map((key) => {
-                const active = durationPreset === key;
-                return (
-                  <motion.button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      setDurationPreset(key);
-                      if (key === 'custom') {
-                        setShowCustomDuration(true);
-                      } else {
-                        setShowCustomDuration(false);
-                        setDuration(DURATION_PRESET_VALUES[key]);
-                      }
-                    }}
-                    whileTap={{ scale: 0.96 }}
-                    aria-label={`Duration ${DURATION_PRESET_LABELS[key]}`}
-                    aria-pressed={active}
-                    style={{
-                      height: 28,
-                      padding: '0 10px',
-                      borderRadius: 7,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      fontFamily: 'monospace',
-                      background: active
-                        ? 'rgba(6,182,212,0.18)'
-                        : 'rgba(255,255,255,0.025)',
-                      border: active
-                        ? '1.5px solid rgba(6,182,212,0.75)'
-                        : '1px solid rgba(255,255,255,0.08)',
-                      color: active ? 'rgb(6,182,212)' : 'rgba(255,255,255,0.5)',
-                      boxShadow: active ? '0 0 10px rgba(6,182,212,0.35)' : 'none',
-                      cursor: 'pointer',
-                      letterSpacing: '0.02em',
-                      transition: 'background 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1), color 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1)',
-                    }}
-                  >
-                    {DURATION_PRESET_LABELS[key]}
-                  </motion.button>
-                );
-              })}
-          </div>
-
-          <AnimatePresence initial={false}>
-            {showCustomDuration && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.22, ease: EASE }}
-                style={{ overflow: 'hidden' }}
-              >
-                <div style={{ paddingTop: 4, position: 'relative' }}>
-                  <input
-                    type="number"
-                    value={duration}
-                    onChange={(e) => setDuration(Math.max(5, Number(e.target.value) || 0))}
-                    onFocus={focusInput}
-                    onBlur={blurInput}
-                    min={5}
-                    aria-label="Custom duration in minutes"
-                    className="aa-no-spin"
-                    style={{
-                      padding: '10px 44px 10px 12px',
-                      borderRadius: 8,
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      color: 'rgba(255,255,255,0.95)',
-                      fontSize: 13,
-                      fontFamily: 'monospace',
-                      outline: 'none',
-                      colorScheme: 'dark',
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      appearance: 'textfield',
-                      MozAppearance: 'textfield',
-                      transition: 'border-color 180ms ease, box-shadow 180ms ease',
-                    }}
-                  />
+                {/* Duration connector */}
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
                   <span style={{
-                    position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-                    color: 'rgba(255,255,255,0.4)', fontSize: 11, fontFamily: 'monospace',
-                    letterSpacing: '0.06em', pointerEvents: 'none',
-                  }}>min</span>
+                    color: 'rgba(255,255,255,0.45)',
+                    fontSize: 11,
+                    fontFamily: 'var(--font-geist-mono)',
+                    whiteSpace: 'nowrap',
+                    letterSpacing: '0.06em',
+                  }}>
+                    {formatDuration(duration)}
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+
+                {/* End time */}
+                <span
+                  style={{
+                    color: 'rgba(245,158,11,0.85)',
+                    fontSize: 32,
+                    fontWeight: 700,
+                    fontFamily: 'var(--font-geist-mono)',
+                    lineHeight: 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  {formatHour12(endTime)}
+                </span>
+              </div>
+
+          {/* Duration preset chips */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {(['30', '60', '120', '180'] as const).map((key) => {
+              const active = durationPreset === key;
+              return (
+                <motion.button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setDurationPreset(key);
+                    setDuration(DURATION_PRESET_VALUES[key]);
+                  }}
+                  whileTap={{ scale: 0.96 }}
+                  aria-label={`Duration ${DURATION_PRESET_LABELS[key]}`}
+                  aria-pressed={active}
+                  style={{
+                    height: 28,
+                    padding: '0 10px',
+                    borderRadius: 7,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    fontFamily: 'var(--font-geist-mono)',
+                    background: active ? 'rgba(6,182,212,0.18)' : 'rgba(255,255,255,0.025)',
+                    border: active ? '1.5px solid rgba(6,182,212,0.75)' : '1px solid rgba(255,255,255,0.08)',
+                    color: active ? 'rgb(6,182,212)' : 'rgba(255,255,255,0.5)',
+                    boxShadow: active ? '0 0 10px rgba(6,182,212,0.35)' : 'none',
+                    cursor: 'pointer',
+                    letterSpacing: '0.02em',
+                    transition: 'background 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1), color 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1)',
+                  }}
+                >
+                  {DURATION_PRESET_LABELS[key]}
+                </motion.button>
+              );
+            })}
+          </div>
 
           {/* Scrubber track */}
           <div>
@@ -1373,13 +1490,60 @@ export default function AddActivityDialog({
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.3)',
               }}
             >
+              {/* 6-hour vertical dividers */}
+              {[25, 50, 75].map((pct) => (
+                <div
+                  key={`div-${pct}`}
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: `${pct}%`,
+                    top: 0,
+                    bottom: 0,
+                    width: 1,
+                    background: 'rgba(255,255,255,0.12)',
+                    pointerEvents: 'none',
+                    zIndex: 1,
+                  }}
+                />
+              ))}
+
+              {/* In-track hour labels */}
+              {[
+                { pct: 0, label: '12a', align: 'left' as const },
+                { pct: 25, label: '6a', align: 'center' as const },
+                { pct: 50, label: '12p', align: 'center' as const },
+                { pct: 75, label: '6p', align: 'center' as const },
+                { pct: 100, label: '12a', align: 'right' as const },
+              ].map(({ pct, label, align }) => (
+                <span
+                  key={`inlabel-${pct}`}
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: `${pct}%`,
+                    bottom: 4,
+                    transform: align === 'center' ? 'translateX(-50%)' : align === 'right' ? 'translateX(-100%)' : 'none',
+                    fontSize: 8,
+                    fontFamily: 'var(--font-geist-mono)',
+                    color: 'rgba(255,255,255,0.45)',
+                    letterSpacing: '0.04em',
+                    pointerEvents: 'none',
+                    zIndex: 2,
+                    lineHeight: 1,
+                  }}
+                >
+                  {label}
+                </span>
+              ))}
+
               {/* Ambient day/night icons */}
               {[
-                { pct: 5, Icon: Moon, color: 'rgba(200,210,255,0.55)', size: 12 },
-                { pct: 25, Icon: Sunrise, color: 'rgba(232,180,120,0.75)', size: 12 },
-                { pct: 50, Icon: Sun, color: 'rgba(255,220,120,0.85)', size: 13 },
-                { pct: 77, Icon: Sunset, color: 'rgba(232,140,80,0.75)', size: 12 },
-                { pct: 95, Icon: Moon, color: 'rgba(200,210,255,0.55)', size: 12 },
+                { pct: 5, Icon: Moon, color: 'rgba(200,210,255,0.75)', size: 14 },
+                { pct: 25, Icon: Sunrise, color: 'rgba(232,180,120,0.90)', size: 14 },
+                { pct: 50, Icon: Sun, color: 'rgba(255,220,120,1.0)', size: 16 },
+                { pct: 77, Icon: Sunset, color: 'rgba(232,140,80,0.90)', size: 14 },
+                { pct: 95, Icon: Moon, color: 'rgba(200,210,255,0.75)', size: 14 },
               ].map(({ pct, Icon, color, size }, i) => (
                 <div
                   key={`ambient-${i}`}
@@ -1387,12 +1551,12 @@ export default function AddActivityDialog({
                   style={{
                     position: 'absolute',
                     left: `${pct}%`,
-                    top: 8,
+                    top: 7,
                     transform: 'translateX(-50%)',
                     pointerEvents: 'none',
                     lineHeight: 0,
                     zIndex: 2,
-                    filter: `drop-shadow(0 0 4px ${color})`,
+                    filter: `drop-shadow(0 0 5px ${color})`,
                   }}
                 >
                   <Icon size={size} color={color} strokeWidth={1.8} />
@@ -1442,7 +1606,7 @@ export default function AddActivityDialog({
                 dragMomentum={false}
                 onDragStart={() => { setDragging(true); dragStartTimeRef.current = startTime; }}
                 onDrag={handleDrag}
-                onDragEnd={() => { setDragging(false); setStartTime(dragStartTimeRef.current); }}
+                onDragEnd={() => { setDragging(false); }}
                 onKeyDown={handleScrubberKeyDown}
                 onFocus={() => setScrubberFocused(true)}
                 onBlur={() => setScrubberFocused(false)}
@@ -1479,7 +1643,7 @@ export default function AddActivityDialog({
             <div style={{
               position: 'relative',
               height: 12,
-              marginTop: 6,
+              marginTop: 4,
               width: '100%',
             }}>
               {[
@@ -1501,9 +1665,9 @@ export default function AddActivityDialog({
                         : align === 'end'
                           ? 'translateX(-100%)'
                           : 'translateX(-50%)',
-                    fontSize: 9,
-                    fontFamily: 'monospace',
-                    color: 'rgba(255,255,255,0.35)',
+                    fontSize: 10,
+                    fontFamily: 'var(--font-geist-mono)',
+                    color: 'rgba(255,255,255,0.55)',
                     letterSpacing: '0.04em',
                   }}
                 >
@@ -1566,6 +1730,25 @@ export default function AddActivityDialog({
           zIndex: 1,
         }}
       >
+        {submitError && (
+          <motion.div
+            initial={{ opacity: 0, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              marginRight: 'auto',
+              fontSize: 11,
+              fontWeight: 500,
+              color: 'rgb(239,68,68)',
+              fontFamily: 'var(--font-sora)',
+            }}
+          >
+            <AlertTriangle size={11} />
+            <span>{submitError}</span>
+          </motion.div>
+        )}
         <button
           onClick={onClose}
           type="button"
@@ -1667,7 +1850,16 @@ export default function AddActivityDialog({
               <span>Added</span>
             </motion.span>
           ) : submitting ? (
-            <span style={{ position: 'relative', zIndex: 1 }}>Adding…</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, position: 'relative', zIndex: 1 }}>
+              <motion.span
+                animate={{ rotate: 360 }}
+                transition={{ duration: 0.8, ease: 'linear', repeat: Infinity }}
+                style={{ display: 'inline-flex' }}
+              >
+                <Loader2 size={13} strokeWidth={2.2} />
+              </motion.span>
+              <span>Adding…</span>
+            </span>
           ) : (
             <span style={{
               display: 'inline-flex',
@@ -1694,7 +1886,7 @@ export default function AddActivityDialog({
                   background: 'rgba(0,0,0,0.25)',
                   border: '1px solid rgba(255,255,255,0.15)',
                   fontSize: 10,
-                  fontFamily: 'monospace',
+                  fontFamily: 'var(--font-geist-mono)',
                   color: 'rgba(10,10,10,0.75)',
                   letterSpacing: '0.04em',
                   marginLeft: 2,
@@ -1709,6 +1901,302 @@ export default function AddActivityDialog({
       </motion.div>
     );
   };
+
+  const picker = typeof document === 'undefined' ? null : createPortal(
+    <AnimatePresence>
+      {pickerOpen && pickerRect && (
+        <>
+          <motion.div
+            key="picker-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.14 }}
+            onClick={closePicker}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 10001,
+              background: 'transparent',
+            }}
+          />
+          <motion.div
+            key="picker-popover"
+            initial={{ opacity: 0, y: -6, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.96 }}
+            transition={{ duration: 0.18, ease: EASE }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              left: pickerRect.left,
+              top: pickerRect.top,
+              minWidth: 320,
+              zIndex: 10002,
+              padding: 14,
+              background: 'rgba(12,15,22,0.98)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(6,182,212,0.4)',
+              borderRadius: 12,
+              boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 24px rgba(6,182,212,0.18)',
+              fontFamily: 'var(--font-sora)',
+            }}
+          >
+            <div aria-hidden style={{
+              position: 'absolute', top: 0, left: 14, right: 14, height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(6,182,212,0.6), transparent)',
+            }} />
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 14,
+            }}>
+              <div style={{
+                fontSize: 10, fontWeight: 600, letterSpacing: '0.14em',
+                color: 'rgba(6,182,212,0.85)', textTransform: 'uppercase',
+                fontFamily: 'var(--font-sora)',
+              }}>
+                Set time
+              </div>
+              <div style={{
+                fontSize: 11, fontFamily: 'var(--font-geist-mono)',
+                color: 'rgba(255,255,255,0.5)', letterSpacing: '0.06em',
+              }}>
+                {(() => {
+                  const [h24, m] = startTime.split(':').map(Number);
+                  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+                  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${h24 >= 12 ? 'PM' : 'AM'}`;
+                })()}
+              </div>
+            </div>
+
+            {/* Hour + Minute sliders stacked */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+              {/* HOUR slider */}
+              {(() => {
+                const [h24] = startTime.split(':').map(Number);
+                const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+                return (
+                  <div>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                      marginBottom: 6,
+                    }}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 600, letterSpacing: '0.14em',
+                        color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase',
+                        fontFamily: 'var(--font-sora)',
+                      }}>
+                        Hour
+                      </span>
+                      <span style={{
+                        fontSize: 22, fontWeight: 700,
+                        fontFamily: 'var(--font-geist-mono)',
+                        color: 'rgb(245,158,11)',
+                        lineHeight: 1,
+                      }}>
+                        {String(h12).padStart(2, '0')}
+                      </span>
+                    </div>
+                    <div style={{
+                      position: 'relative',
+                      height: 32,
+                      background: 'rgba(255,255,255,0.02)',
+                      border: '1px solid rgba(6,182,212,0.15)',
+                      borderRadius: 6,
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(12, 1fr)',
+                      overflow: 'hidden',
+                    }}>
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const hourValue = i + 1;
+                        const active = hourValue === h12;
+                        return (
+                          <button
+                            key={hourValue}
+                            type="button"
+                            onClick={() => {
+                              const [curH24, curM] = startTime.split(':').map(Number);
+                              const isPm = curH24 >= 12;
+                              const newH24 = isPm
+                                ? (hourValue === 12 ? 12 : hourValue + 12)
+                                : (hourValue === 12 ? 0 : hourValue);
+                              setStartTime(`${String(newH24).padStart(2, '0')}:${String(curM).padStart(2, '0')}`);
+                            }}
+                            style={{
+                              background: active ? 'rgba(245,158,11,0.25)' : 'transparent',
+                              border: 'none',
+                              borderRight: i < 11 ? '1px solid rgba(6,182,212,0.08)' : 'none',
+                              color: active ? 'rgb(245,158,11)' : 'rgba(255,255,255,0.5)',
+                              fontSize: 10,
+                              fontFamily: 'var(--font-geist-mono)',
+                              fontWeight: active ? 700 : 500,
+                              cursor: 'pointer',
+                              padding: 0,
+                              transition: 'all 140ms ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!active) e.currentTarget.style.background = 'rgba(6,182,212,0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!active) e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            {hourValue}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* MINUTE slider — same pattern, 12 slots of 5-minute increments */}
+              {(() => {
+                const [, m] = startTime.split(':').map(Number);
+                const snappedToSlot = Math.round(m / 5) * 5;
+                return (
+                  <div>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                      marginBottom: 6,
+                    }}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 600, letterSpacing: '0.14em',
+                        color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase',
+                        fontFamily: 'var(--font-sora)',
+                      }}>
+                        Minute
+                      </span>
+                      <span style={{
+                        fontSize: 22, fontWeight: 700,
+                        fontFamily: 'var(--font-geist-mono)',
+                        color: 'rgb(245,158,11)',
+                        lineHeight: 1,
+                      }}>
+                        {String(m).padStart(2, '0')}
+                      </span>
+                    </div>
+                    <div style={{
+                      position: 'relative',
+                      height: 32,
+                      background: 'rgba(255,255,255,0.02)',
+                      border: '1px solid rgba(6,182,212,0.15)',
+                      borderRadius: 6,
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(12, 1fr)',
+                      overflow: 'hidden',
+                    }}>
+                      {Array.from({ length: 12 }, (_, i) => {
+                        const minValue = i * 5;
+                        const active = minValue === snappedToSlot;
+                        return (
+                          <button
+                            key={minValue}
+                            type="button"
+                            onClick={() => {
+                              const [curH24] = startTime.split(':').map(Number);
+                              setStartTime(`${String(curH24).padStart(2, '0')}:${String(minValue).padStart(2, '0')}`);
+                            }}
+                            style={{
+                              background: active ? 'rgba(245,158,11,0.25)' : 'transparent',
+                              border: 'none',
+                              borderRight: i < 11 ? '1px solid rgba(6,182,212,0.08)' : 'none',
+                              color: active ? 'rgb(245,158,11)' : 'rgba(255,255,255,0.5)',
+                              fontSize: 10,
+                              fontFamily: 'var(--font-geist-mono)',
+                              fontWeight: active ? 700 : 500,
+                              cursor: 'pointer',
+                              padding: 0,
+                              transition: 'all 140ms ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!active) e.currentTarget.style.background = 'rgba(6,182,212,0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!active) e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            {String(minValue).padStart(2, '0')}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* AM / PM toggle — segmented control */}
+              {(() => {
+                const [h24] = startTime.split(':').map(Number);
+                const isPm = h24 >= 12;
+                return (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: 0,
+                    padding: 3,
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px solid rgba(6,182,212,0.15)',
+                    borderRadius: 8,
+                    position: 'relative',
+                  }}>
+                    {(['AM', 'PM'] as const).map((period) => {
+                      const active = (period === 'PM') === isPm;
+                      return (
+                        <button
+                          key={period}
+                          type="button"
+                          onClick={() => { if ((period === 'PM') !== isPm) toggleAmPm(); }}
+                          style={{
+                            padding: '8px 0',
+                            fontSize: 11, fontWeight: 700,
+                            fontFamily: 'var(--font-geist-mono)',
+                            letterSpacing: '0.12em',
+                            background: active ? 'rgba(245,158,11,0.2)' : 'transparent',
+                            border: active ? '1px solid rgba(245,158,11,0.6)' : '1px solid transparent',
+                            color: active ? 'rgb(245,158,11)' : 'rgba(255,255,255,0.45)',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            transition: 'all 160ms ease',
+                          }}
+                        >
+                          {period}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Done button */}
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+              <button
+                type="button"
+                onClick={closePicker}
+                style={{
+                  padding: '6px 16px',
+                  fontSize: 11, fontWeight: 600,
+                  fontFamily: 'var(--font-sora)',
+                  letterSpacing: '0.06em',
+                  background: 'linear-gradient(180deg, rgba(6,182,212,0.22) 0%, rgba(6,182,212,0.12) 100%)',
+                  border: '1px solid rgba(6,182,212,0.55)',
+                  color: 'rgb(6,182,212)',
+                  borderRadius: 7,
+                  cursor: 'pointer',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 8px rgba(6,182,212,0.2)',
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body
+  );
 
   const priorityTooltip = tooltipRect && typeof document !== 'undefined'
     ? createPortal(
@@ -1747,40 +2235,56 @@ export default function AddActivityDialog({
     : null;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.22 }}
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
-          background: 'rgba(0,0,0,0.65)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          backdropFilter: 'blur(12px) saturate(1.2)',
-          WebkitBackdropFilter: 'blur(12px) saturate(1.2)',
-          padding: 20,
+    <>
+      {/* Inject keyframe styles once per dialog mount — kept outside the backdrop motion.div
+          so they are available immediately and not recreated inside the animated subtree. */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .aa-no-spin::-webkit-outer-spin-button,
+        .aa-no-spin::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .aa-no-spin {
+          -moz-appearance: textfield;
+          appearance: textfield;
+        }
+        @keyframes aaSectionPulse {
+          0% { box-shadow: 0 0 0 0 rgba(6,182,212,0.5); }
+          100% { box-shadow: 0 0 0 8px rgba(6,182,212,0); }
+        }
+        .aa-section-badge {
+          animation: aaSectionPulse 1.2s ease-out;
+        }
+      `}} />
+      {picker}
+      <AnimatePresence
+        onExitComplete={() => {
+          const item = pendingItemRef.current;
+          if (!item) return;
+          pendingItemRef.current = null;
+          setTimeout(() => {
+            const store = useTripStore.getState();
+            store.insertPlanItemLocal(item);
+            store.markAsRecentlyAdded(item.id);
+          }, 200);
         }}
       >
-        <style dangerouslySetInnerHTML={{ __html: `
-          .aa-no-spin::-webkit-outer-spin-button,
-          .aa-no-spin::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-          }
-          .aa-no-spin {
-            -moz-appearance: textfield;
-            appearance: textfield;
-          }
-          @keyframes aaSectionPulse {
-            0% { box-shadow: 0 0 0 0 rgba(6,182,212,0.5); }
-            100% { box-shadow: 0 0 0 8px rgba(6,182,212,0); }
-          }
-          .aa-section-badge {
-            animation: aaSectionPulse 1.2s ease-out;
-          }
-        `}} />
+        {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.22 }}
+          onClick={onClose}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.65)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: 'blur(12px) saturate(1.2)',
+            WebkitBackdropFilter: 'blur(12px) saturate(1.2)',
+            padding: 20,
+          }}
+        >
 
         <motion.div
           ref={dialogRef}
@@ -1788,9 +2292,16 @@ export default function AddActivityDialog({
           aria-modal="true"
           aria-labelledby={titleId}
           initial={{ scale: 0.94, y: 10, opacity: 0 }}
-          animate={{ scale: 1, y: 0, opacity: 1 }}
+          animate={{
+            scale: submitSuccess ? [1, 1.015, 1] : 1,
+            y: 0,
+            opacity: 1,
+          }}
           exit={{ scale: 0.94, y: 10, opacity: 0 }}
-          transition={{ duration: 0.28, ease: EASE }}
+          transition={{
+            scale: submitSuccess ? { duration: 0.2, times: [0, 0.5, 1] } : { duration: 0.28, ease: EASE },
+            default: { duration: 0.28, ease: EASE },
+          }}
           onClick={(e) => e.stopPropagation()}
           style={{
             width: 580,
@@ -1851,39 +2362,16 @@ export default function AddActivityDialog({
               {renderHeader()}
               {renderWhatSection()}
 
-              {/* Chapter-break divider with diamond */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                margin: '2px 0',
-                position: 'relative',
-                zIndex: 1,
-              }}>
-                <div style={{
-                  flex: 1, height: 1,
-                  background: 'linear-gradient(90deg, transparent, rgba(6,182,212,0.2))',
-                }} />
-                <div aria-hidden style={{
-                  width: 4, height: 4,
-                  background: 'rgb(6,182,212)',
-                  transform: 'rotate(45deg)',
-                  boxShadow: '0 0 6px rgba(6,182,212,0.6)',
-                }} />
-                <div style={{
-                  flex: 1, height: 1,
-                  background: 'linear-gradient(90deg, rgba(6,182,212,0.2), transparent)',
-                }} />
-              </div>
-
               {renderWhenSection()}
               {renderFooter()}
             </div>
           </div>
         </motion.div>
 
-        {priorityTooltip}
-      </motion.div>
-    </AnimatePresence>
+          {priorityTooltip}
+        </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

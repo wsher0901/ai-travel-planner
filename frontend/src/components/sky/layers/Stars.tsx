@@ -1,5 +1,6 @@
 'use client';
 
+// top values are percentages of the strip height, not raw pixels
 const STARS = [
   { left: 3, top: 22, big: false, delay: 0.2, opacity: 1 },
   { left: 8, top: 40, big: true, delay: 0.6, opacity: 1 },
@@ -19,7 +20,7 @@ export default function Stars() {
           <div key={i} style={{
             position: 'absolute',
             left: `${s.left}%`,
-            top: s.top,
+            top: `${s.top}%`,
             width: size, height: size,
             background: '#fff',
             borderRadius: '50%',

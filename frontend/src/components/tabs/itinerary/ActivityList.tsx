@@ -2,17 +2,23 @@
 
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { MapPin, Landmark, Utensils, Music, Plane, Hotel, Calendar, ExternalLink, Sparkles, Tag, ChevronDown } from 'lucide-react';
-import { type PlanItem, type TripPlan } from '@/store/tripStore';
+import { MapPin, Landmark, Utensils, Music, Plane, Hotel, Calendar, ExternalLink, Sparkles, Tag, ChevronDown, Ticket, Mountain, TreePine, ShoppingBag, GlassWater, Flower2 } from 'lucide-react';
+import { useTripStore, type PlanItem, type TripPlan } from '@/store/tripStore';
 import { getActivityColor } from '@/lib/activityColors';
 import { useUIStore } from '@/store/uiStore';
 
 const TYPE_ICONS: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
-  sightseeing: Landmark,
-  food: Utensils,
-  activity: Music,
-  transport: Plane,
+  sightseeing:   Landmark,
+  food:          Utensils,
+  activity:      Music,
+  transport:     Plane,
   accommodation: Hotel,
+  entertainment: Ticket,
+  outdoor:       Mountain,
+  nature:        TreePine,
+  shopping:      ShoppingBag,
+  nightlife:     GlassWater,
+  wellness:      Flower2,
 };
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -64,11 +70,15 @@ const PRIORITY_STYLES = {
   },
 };
 
+// selectedDate is part of the contract (parent may pass it) but not used directly here —
+// dayItems are already filtered by the parent. Keep in Props for API stability.
 export default function ActivityList({ dayItems, tripPlan }: Props) {
   const [localHoveredId, setLocalHoveredId] = useState<string | null>(null);
-  const hoveredActivityId = useUIStore((s) => s.hoveredActivityId);
-  const expandedActivityIds = useUIStore((s) => s.expandedActivityIds);
-  const toggleExpandedActivityId = useUIStore((s) => s.toggleExpandedActivityId);
+  const hoverExpandedId = useUIStore((s) => s.hoverExpandedId);
+  const lockedExpandedId = useUIStore((s) => s.lockedExpandedId);
+  const suppressHoverUntilLeaveId = useUIStore((s) => s.suppressHoverUntilLeaveId);
+  const setLockedExpandedId = useUIStore((s) => s.setLockedExpandedId);
+  const recentlyAddedIds = useTripStore((s) => s.recentlyAddedIds);
 
   const sorted = useMemo(() => {
     return [...dayItems].sort((a, b) => {
@@ -102,39 +112,20 @@ export default function ActivityList({ dayItems, tripPlan }: Props) {
         const color = getActivityColor(item.activity_type);
         const Icon = TYPE_ICONS[item.activity_type ?? 'activity'] ?? Music;
         const priority = (item.priority ?? 'flexible') as keyof typeof PRIORITY_STYLES;
-        const prioStyle = PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.flexible;
+        const prioStyle = PRIORITY_STYLES[priority] || PRIORITY_STYLES.flexible;
+        const reasoning = (item as PlanItem & { reasoning?: string }).reasoning;
         const location = item.location_name ?? item.address;
-        const rowId = item.id ? String(item.id) : null;
-        const isPillHovered = rowId !== null && rowId === hoveredActivityId;
-        const isSticky = rowId !== null && expandedActivityIds.has(rowId);
-        const isExpanded = isPillHovered || isSticky;
-        const isCardHovered = rowId !== null && rowId === localHoveredId;
-        const isHighlighted = isPillHovered || isSticky || isCardHovered;
+        const rowId = String(item.id);
+        const isHoverExpanded = rowId === hoverExpandedId;
+        const isLocked = rowId === lockedExpandedId;
+        const isSuppressed = rowId === suppressHoverUntilLeaveId;
+        const isExpanded = (isHoverExpanded || isLocked) && !isSuppressed;
+        const isCardHovered = rowId === localHoveredId;
+        const isHighlighted = isExpanded || isCardHovered;
+        const isNew = recentlyAddedIds.has(rowId);
 
-        return (
-          <motion.div
-            key={item.id ? String(item.id) : `row-${idx}`}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: idx * 0.05, ease: [0.22, 1, 0.36, 1] }}
-            onClick={() => { if (rowId) toggleExpandedActivityId(rowId); }}
-            onMouseEnter={() => { if (rowId) setLocalHoveredId(rowId); }}
-            onMouseLeave={() => setLocalHoveredId(null)}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              background: `${color}0c`,
-              border: `1px solid ${color}40`,
-              borderLeft: `3px solid ${color}`,
-              borderRadius: 10,
-              cursor: 'pointer',
-              overflow: 'hidden',
-              boxShadow: isHighlighted
-                ? `inset 0 0 10px ${color}22, 0 0 20px ${color}55, 0 0 0 1px ${color}60, 0 2px 8px rgba(0,0,0,0.3)`
-                : `inset 0 0 10px ${color}22, 0 0 0 1px ${color}10`,
-              transition: 'box-shadow 200ms ease',
-            }}
-          >
+        const cardContent = (
+          <>
             {/* ==== Compact row ==== */}
             <div style={{
               display: 'flex',
@@ -277,11 +268,11 @@ export default function ActivityList({ dayItems, tripPlan }: Props) {
                       </div>
                     )}
 
-                    {(item as PlanItem & { reasoning?: string }).reasoning && (
+                    {reasoning && (
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                         <Sparkles size={13} color="rgba(245,158,11,0.7)" style={{ marginTop: 2, flexShrink: 0 }} />
                         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontFamily: 'var(--font-sora)', lineHeight: 1.5 }}>
-                          {(item as PlanItem & { reasoning?: string }).reasoning}
+                          {reasoning}
                         </div>
                       </div>
                     )}
@@ -289,8 +280,8 @@ export default function ActivityList({ dayItems, tripPlan }: Props) {
                     {item.tags && item.tags.length > 0 && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <Tag size={12} color="rgba(255,255,255,0.4)" />
-                        {item.tags.map((t, i) => (
-                          <span key={i} style={{
+                        {item.tags.map((t) => (
+                          <span key={t} style={{
                             fontSize: 10, fontWeight: 500,
                             padding: '2px 7px', borderRadius: 4,
                             background: 'rgba(6,182,212,0.08)',
@@ -325,6 +316,75 @@ export default function ActivityList({ dayItems, tripPlan }: Props) {
                 </motion.div>
               )}
             </AnimatePresence>
+          </>
+        );
+
+        const cardBaseStyle: React.CSSProperties = {
+          display: 'flex',
+          flexDirection: 'column',
+          background: `${color}0c`,
+          border: `1px solid ${color}40`,
+          borderLeft: `3px solid ${color}`,
+          borderRadius: 10,
+          cursor: 'pointer',
+          overflow: 'hidden',
+          boxShadow: isHighlighted
+            ? `inset 0 0 10px ${color}22, 0 0 20px ${color}55, 0 0 0 1px ${color}60, 0 2px 8px rgba(0,0,0,0.3)`
+            : `inset 0 0 10px ${color}22, 0 0 0 1px ${color}10`,
+          transition: 'box-shadow 200ms ease',
+        };
+
+        return (
+          <motion.div
+            key={rowId}
+            data-scroll-id={rowId}
+            layout
+            initial={isNew
+              ? { opacity: 0, scale: 0.6, filter: 'blur(8px)' }
+              : { opacity: 0, x: -8 }
+            }
+            animate={isNew
+              ? { opacity: 1, scale: 1, filter: 'blur(0px)' }
+              : { opacity: 1, x: 0 }
+            }
+            transition={isNew
+              ? {
+                  layout: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+                  opacity: { duration: 0.5, delay: 0.85, ease: [0.22, 1, 0.36, 1] },
+                  scale: { duration: 0.6, delay: 0.85, ease: [0.22, 1, 0.36, 1] },
+                  filter: { duration: 0.5, delay: 0.85 },
+                }
+              : {
+                  duration: 0.3,
+                  delay: idx * 0.05,
+                  ease: [0.22, 1, 0.36, 1],
+                }
+            }
+            onClick={() => {
+              if (!rowId) return;
+              const handle = useUIStore.getState().itineraryScrollHandle;
+              if (isExpanded) {
+                useUIStore.setState((s) => {
+                  const patch: Partial<typeof s> = {};
+                  if (s.lockedExpandedId === rowId) patch.lockedExpandedId = null;
+                  if (s.hoverExpandedId === rowId) patch.hoverExpandedId = null;
+                  return patch;
+                });
+              } else {
+                if (handle && !handle.isElementVisible(rowId)) {
+                  handle.scrollToElement(rowId);
+                }
+                setLockedExpandedId(rowId);
+              }
+            }}
+            onMouseEnter={() => { if (rowId) setLocalHoveredId(rowId); }}
+            onMouseLeave={() => setLocalHoveredId(null)}
+            style={{
+              ...cardBaseStyle,
+              transformOrigin: 'center center',
+            }}
+          >
+            {cardContent}
           </motion.div>
         );
       })}

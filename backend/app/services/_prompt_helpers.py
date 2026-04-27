@@ -1,8 +1,11 @@
 """Shared helpers for building AI provider prompts.
 Extracted from groq_provider.py so GeminiProvider (and future providers) can reuse.
 """
+import json
+import logging
 from datetime import date
 
+logger = logging.getLogger("roam.prompt_helpers")
 
 SLIDER_LABELS: dict[str, tuple[str, list[str]]] = {
     "budget":          ("Budget level",    ["Budget",   "Mid-range", "Luxury"]),
@@ -53,10 +56,22 @@ SYSTEM_PROMPTS: dict[str, str] = {
 }
 
 
-def build_plan_system_prompt(sliders: dict | None) -> str:
+def build_plan_system_prompt(sliders: dict | None, user_timezone: str | None = None) -> str:
     """System prompt for structured JSON plan generation. Shared across all providers."""
+    # Use timezone-aware date if user_timezone is provided
+    today_str: str
+    if user_timezone:
+        try:
+            from zoneinfo import ZoneInfo
+            import datetime as _dt
+            today_str = _dt.datetime.now(ZoneInfo(user_timezone)).date().isoformat()
+        except Exception:
+            today_str = date.today().isoformat()
+    else:
+        today_str = date.today().isoformat()
+
     date_context = (
-        f"Today's date is {date.today().isoformat()}. Generate plans for future dates only. "
+        f"Today's date is {today_str}. Generate plans for future dates only. "
         f"For vague phrasing like 'a week in June', use the upcoming June.\n\n"
     )
     body = (
@@ -112,7 +127,7 @@ def build_plan_system_prompt(sliders: dict | None) -> str:
 
 
 def clean_json_response(raw: str) -> str:
-    """Strip markdown fences, locate JSON object boundaries."""
+    """Strip markdown fences and extract the first complete JSON object."""
     cleaned = raw.strip()
     if cleaned.startswith("```json"):
         cleaned = cleaned[7:]
@@ -121,13 +136,18 @@ def clean_json_response(raw: str) -> str:
     if cleaned.endswith("```"):
         cleaned = cleaned[:-3]
     cleaned = cleaned.strip()
-    # Find JSON object start if there's preamble
-    if not cleaned.startswith("{"):
-        start = cleaned.find("{")
-        if start != -1:
-            cleaned = cleaned[start:]
-    # Trim trailing text after last closing brace
-    if cleaned.count("}") > 0:
-        last_brace = cleaned.rfind("}")
-        cleaned = cleaned[:last_brace + 1]
-    return cleaned
+
+    # Find the first '{' to skip any preamble
+    start = cleaned.find("{")
+    if start == -1:
+        return cleaned  # no JSON object found — let caller fail on parse
+    cleaned = cleaned[start:]
+
+    # Use raw_decode to extract the first complete JSON object only
+    decoder = json.JSONDecoder()
+    try:
+        _, end_index = decoder.raw_decode(cleaned)
+        return cleaned[:end_index]
+    except json.JSONDecodeError:
+        # Fallback: return as-is and let the caller handle the error
+        return cleaned

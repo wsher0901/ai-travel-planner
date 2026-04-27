@@ -34,7 +34,21 @@
       "Bash(tar -xzf /tmp/three-globe.tgz -C /tmp \"package/example/clouds/clouds.png\" \"package/example/img/earth-blue-marble.jpg\")",
       "Bash(cp /tmp/package/example/clouds/clouds.png C:/Users/WonseukHer/MyFile/Project/ai-travel-planner/frontend/public/textures/earth-clouds.png)",
       "mcp__chrome-devtools__list_network_requests",
-      "mcp__chrome-devtools__take_screenshot"
+      "mcp__chrome-devtools__take_screenshot",
+      "Bash(npm outdated *)",
+      "Bash(node -e \"const r = require\\('C:/Users/WonseukHer/MyFile/Project/ai-travel-planner/frontend/node_modules/radix-ui'\\); console.log\\(Object.keys\\(r\\).slice\\(0,20\\)\\)\")",
+      "Bash(node *)",
+      "Bash(python -c ' *)",
+      "Bash(/c/miniconda3/envs/travel-planner/python -c ' *)",
+      "Read(//c/miniconda3/**)",
+      "Read(//c/Users/WonseukHer/miniconda3/**)",
+      "Bash(find /c -name \"python.exe\" -path \"*/travel-planner/*\")",
+      "Read(//c/Users/WonseukHer/AppData/Local/miniconda3/**)",
+      "Read(//c/Users/WonseukHer/anaconda3/**)",
+      "Bash(npm run *)",
+      "Bash(where python *)",
+      "mcp__chrome-devtools__evaluate_script",
+      "Bash(del *)"
     ]
   },
   "model": "sonnet",

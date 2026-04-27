@@ -1,14 +1,17 @@
+import asyncio
 import logging
 import re
 import traceback
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from supabase import create_client
+from fastapi import APIRouter, Depends, HTTPException, Request
+from supabase import Client, create_client
 
 from app.config import settings
+from app.limiter import limiter
+from app.models.requests import PlanRequest
+from app.services.auth import verify_token
 from app.services.provider_ladder import get_ladder
 
 logger = logging.getLogger("roam.plan")
@@ -20,8 +23,22 @@ logger.setLevel(logging.INFO)
 
 router = APIRouter(prefix="/plan", tags=["plan"])
 
-supabase = create_client(settings.supabase_url, settings.supabase_service_key)
+# ---------------------------------------------------------------------------
+# Lazy Supabase client — created once, reused across requests
+# ---------------------------------------------------------------------------
+_supabase_client: Client | None = None
 
+
+def get_supabase() -> Client:
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = create_client(settings.supabase_url, settings.supabase_service_key)
+    return _supabase_client
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def parse_trip_duration_days(message: str) -> int | None:
     """Extract user-stated trip duration in days from freeform message.
@@ -162,25 +179,39 @@ def normalize_activity_type(raw_type: str | None, title: str = "", description: 
     return "sightseeing"
 
 
-class PlanRequest(BaseModel):
-    message: str
-    session_id: Optional[str] = None
-    user_id: Optional[str] = None
-    sliders: Optional[dict] = None
-    user_timezone: Optional[str] = None
-    origin_city: Optional[str] = None
-    number_of_travelers: Optional[int] = 1
-
+# ---------------------------------------------------------------------------
+# Endpoint
+# ---------------------------------------------------------------------------
 
 @router.post("/generate")
-async def generate_plan(body: PlanRequest):
-    logger.info(f"/plan/generate | user_id={body.user_id} | session_id={body.session_id} | message_preview={body.message[:120]!r}")
+@limiter.limit("10/minute")
+async def generate_plan(
+    request: Request,
+    body: PlanRequest,
+    token_payload: dict[str, Any] | None = Depends(verify_token),
+):
+    # Prefer token's user_id over body's user_id when both present
+    effective_user_id: str | None = None
+    if token_payload is not None:
+        effective_user_id = token_payload.get("sub")
+    if effective_user_id is None and body.user_id is not None:
+        effective_user_id = str(body.user_id)
+
+    logger.info(
+        f"/plan/generate | user_id={effective_user_id} | session_id={body.session_id} "
+        f"| message_preview={body.message[:40]!r}"
+    )
+
     try:
         ladder = get_ladder()
 
         try:
             logger.info(f"Calling ladder | status={ladder.status()}")
-            plan = await ladder.generate_plan(body.message, {"sliders": body.sliders})
+            context: dict[str, Any] = {
+                "sliders": body.sliders,
+                "user_timezone": body.user_timezone,
+            }
+            plan = await ladder.generate_plan(body.message, context)
         except ValueError as e:
             raise HTTPException(status_code=502, detail=str(e))
         except Exception as e:
@@ -190,12 +221,16 @@ async def generate_plan(body: PlanRequest):
                 detail=f"All AI providers currently unavailable. Please retry shortly. ({type(e).__name__})",
             )
 
-        logger.info(f"AI plan received | destination={plan.get('destination')} | items_count={len(plan.get('plan_items', plan.get('items', [])))}")
-        print(f"AI returned plan with keys: {list(plan.keys())}")
-        print(f"Plan items key: {'plan_items' if 'plan_items' in plan else 'items' if 'items' in plan else 'MISSING'}")
+        logger.info(
+            f"AI plan received | destination={plan.get('destination')} "
+            f"| items_count={len(plan.get('plan_items', plan.get('items', [])))}"
+        )
+        logger.debug(f"AI returned plan keys: {list(plan.keys())}")
+        logger.debug(
+            f"Plan items key: {'plan_items' if 'plan_items' in plan else 'items' if 'items' in plan else 'MISSING'}"
+        )
 
         # Cross-validation: user-stated duration vs AI end_date vs items day count
-        # Priority when disagreement: user_stated > items_max > ai_end_date
         user_stated_days = parse_trip_duration_days(body.message)
 
         items_raw = plan.get("plan_items", plan.get("items", []))
@@ -216,7 +251,7 @@ async def generate_plan(body: PlanRequest):
             try:
                 s = datetime.strptime(start_str, "%Y-%m-%d")
                 e = datetime.strptime(ai_end_str, "%Y-%m-%d")
-                ai_days = (e - s).days + 1  # inclusive day count
+                ai_days = (e - s).days + 1
             except ValueError:
                 pass
 
@@ -233,9 +268,9 @@ async def generate_plan(body: PlanRequest):
             authoritative_days = ai_days
             source = "ai_end_date"
 
-        # Log cross-validation findings
         logger.info(
-            f"Duration cross-check | user_stated={user_stated_days} | ai_days={ai_days} | items_max={items_max_day} | authoritative={authoritative_days} | source={source}"
+            f"Duration cross-check | user_stated={user_stated_days} | ai_days={ai_days} "
+            f"| items_max={items_max_day} | authoritative={authoritative_days} | source={source}"
         )
 
         disagreements = []
@@ -249,13 +284,11 @@ async def generate_plan(body: PlanRequest):
         if disagreements:
             logger.warning(f"Trip duration disagreement | {' | '.join(disagreements)} | using {source}={authoritative_days}")
 
-        # Reconcile end_date + filter items based on authoritative_days
         if authoritative_days is not None and start_str:
             try:
                 start_dt = datetime.strptime(start_str, "%Y-%m-%d")
                 computed_end_dt = start_dt + timedelta(days=authoritative_days - 1)
-                computed_end_str = computed_end_dt.strftime("%Y-%m-%d")
-                plan["end_date"] = computed_end_str
+                plan["end_date"] = computed_end_dt.strftime("%Y-%m-%d")
 
                 if items_raw:
                     filtered_items = [
@@ -264,9 +297,7 @@ async def generate_plan(body: PlanRequest):
                     ]
                     dropped_count = len(items_raw) - len(filtered_items)
                     if dropped_count > 0:
-                        logger.warning(
-                            f"Dropped {dropped_count} plan_items with day_number > {authoritative_days}"
-                        )
+                        logger.warning(f"Dropped {dropped_count} plan_items with day_number > {authoritative_days}")
                     if "plan_items" in plan:
                         plan["plan_items"] = filtered_items
                     elif "items" in plan:
@@ -274,7 +305,7 @@ async def generate_plan(body: PlanRequest):
             except ValueError as e:
                 logger.error(f"Failed to reconcile dates: {e}")
 
-        # Normalize activity_type on every item to a valid enum value.
+        # Normalize activity_type on every item
         normalized_items = plan.get("plan_items", plan.get("items", []))
         remap_counts: dict[str, int] = {}
         for it in normalized_items:
@@ -283,7 +314,8 @@ async def generate_plan(body: PlanRequest):
             description = it.get("description", "")
             normalized = normalize_activity_type(raw, title, description)
             if normalized != raw:
-                remap_counts[f"{raw}->{normalized}"] = remap_counts.get(f"{raw}->{normalized}", 0) + 1
+                key = f"{raw}->{normalized}"
+                remap_counts[key] = remap_counts.get(key, 0) + 1
                 it["activity_type"] = normalized
 
         if remap_counts:
@@ -295,14 +327,16 @@ async def generate_plan(body: PlanRequest):
         elif "items" in plan:
             plan["items"] = normalized_items
 
-        # Insert into trip_plans
+        supabase = get_supabase()
+
+        # Insert into trip_plans (unblocks event loop via asyncio.to_thread)
         try:
             logger.info("Inserting into trip_plans")
-            trip_row = (
-                supabase.table("trip_plans")
+            trip_row = await asyncio.to_thread(
+                lambda: supabase.table("trip_plans")
                 .insert({
-                    "session_id": body.session_id,
-                    "user_id": body.user_id,
+                    "session_id": str(body.session_id) if body.session_id else None,
+                    "user_id": effective_user_id,
                     "destination": plan.get("destination"),
                     "start_date": plan.get("start_date"),
                     "end_date": plan.get("end_date"),
@@ -320,25 +354,20 @@ async def generate_plan(body: PlanRequest):
                 .execute()
             )
         except Exception as e:
-            print(f"ERROR inserting trip_plan: {e}")
+            logger.error(f"ERROR inserting trip_plan: {type(e).__name__}: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to save trip plan: {e}")
 
         trip_plan_id = trip_row.data[0]["id"]
 
-        # Save slider config linked to the trip plan
+        # TODO: restore slider_configs FK Phase 3
+        # slider_configs insert commented out: the session_id column was incorrectly
+        # set to trip_plan_id and the schema FK has not been reconciled yet.
         if body.sliders:
-            supabase.table("slider_configs").insert({
-                "session_id": trip_plan_id,
-                "budget": body.sliders.get("budget", 50),
-                "flexibility": body.sliders.get("flexibility", 50),
-                "inter_distance": body.sliders.get("inter_distance", 50),
-                "intra_distance": body.sliders.get("intra_distance", 50),
-                "adventure_level": body.sliders.get("adventure_level", 50),
-            }).execute()
+            logger.warning("slider_configs insert skipped — FK not reconciled (Phase 3 TODO)")
 
         # Insert each plan item
         plan_items = plan.get("plan_items", plan.get("items", []))
-        print(f"Number of items: {len(plan_items)}")
+        logger.debug(f"Number of items to insert: {len(plan_items)}")
         logger.info(f"Inserting {len(plan_items)} plan_items")
         rows = [
             {
@@ -365,16 +394,26 @@ async def generate_plan(body: PlanRequest):
             }
             for item in plan_items
         ]
+
         inserted_items = []
-        try:
-            if rows:
-                insert_result = supabase.table("plan_items").insert(rows).execute()
+        if rows:
+            try:
+                insert_result = await asyncio.to_thread(
+                    lambda: supabase.table("plan_items").insert(rows).execute()
+                )
                 inserted_items = insert_result.data or []
-                logger.info(f"Inserted {len(inserted_items)} plan_items with ids")
-        except Exception as e:
-            logger.error(f"Failed to insert plan_items: {type(e).__name__}: {e}")
-            logger.error(f"First row: {rows[0] if rows else 'empty'}")
-            # Continue — trip_plan was inserted. Return what we have with best-effort data.
+                logger.info(f"Inserted {len(inserted_items)} plan_items")
+            except Exception as e:
+                logger.error(f"Failed to insert plan_items: {type(e).__name__}: {e} | row_count={len(rows)}")
+                # Attempt to clean up the orphan trip_plans row
+                try:
+                    await asyncio.to_thread(
+                        lambda: supabase.table("trip_plans").delete().eq("id", trip_plan_id).execute()
+                    )
+                    logger.warning(f"Deleted orphan trip_plans row id={trip_plan_id}")
+                except Exception as del_exc:
+                    logger.error(f"Failed to delete orphan trip_plans row: {del_exc}")
+                raise HTTPException(status_code=500, detail="Plan items save failed")
 
         plan_response = {k: v for k, v in plan.items() if k not in ("plan_items", "items")}
 

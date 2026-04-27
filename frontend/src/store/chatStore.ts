@@ -6,7 +6,7 @@ export interface Message {
   id: string
   role: MessageRole
   content: string
-  timestamp: Date
+  timestamp: string
 }
 
 export interface Sliders {
@@ -27,7 +27,8 @@ interface ChatState {
   sliders: Sliders
 
   addMessage: (role: MessageRole, content: string) => void
-  updateMessage: (id: string, content: string) => void
+  appendMessage: (msg: Message) => void
+  updateMessage: (id: string, patch: Partial<Message>) => void
   setZeroShotActive: (active: boolean) => void
   setLoading: (loading: boolean) => void
   setSessionId: (id: string | null) => void
@@ -49,15 +50,18 @@ export const useChatStore = create<ChatState>((set) => ({
           id: crypto.randomUUID(),
           role,
           content,
-          timestamp: new Date(),
+          timestamp: new Date().toISOString(),
         },
       ],
     })),
 
-  updateMessage: (id, content) =>
+  appendMessage: (msg: Message) =>
+    set((s) => ({ messages: [...s.messages, msg] })),
+
+  updateMessage: (id, patch) =>
     set((state) => ({
       messages: state.messages.map((msg) =>
-        msg.id === id ? { ...msg, content } : msg
+        msg.id === id ? { ...msg, ...patch } : msg
       ),
     })),
 

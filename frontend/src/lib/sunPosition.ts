@@ -11,12 +11,23 @@ export interface SunTimes {
 }
 
 function dateToDayMin(d: Date, timezone: string): number {
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-  });
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    });
+  } catch {
+    // Invalid timezone string — fall back to UTC.
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    });
+  }
   const parts = fmt.formatToParts(d);
   const hPart = parts.find(p => p.type === 'hour')?.value ?? '0';
   const mPart = parts.find(p => p.type === 'minute')?.value ?? '0';
@@ -26,7 +37,8 @@ function dateToDayMin(d: Date, timezone: string): number {
 }
 
 export function getSunTimes(date: string, lat: number, lng: number, timezone: string = 'UTC'): SunTimes {
-  const d = new Date(date + 'T12:00:00');
+  // Use 'Z' suffix to force UTC parsing, avoiding local-timezone offset bugs.
+  const d = new Date(date + 'T12:00:00Z');
   const t = SunCalc.getTimes(d, lat, lng);
   return {
     sunriseMin: dateToDayMin(t.sunrise, timezone),
@@ -34,11 +46,12 @@ export function getSunTimes(date: string, lat: number, lng: number, timezone: st
     solarNoonMin: dateToDayMin(t.solarNoon, timezone),
     dawnMin: dateToDayMin(t.dawn, timezone),
     duskMin: dateToDayMin(t.dusk, timezone),
-    astronomicalDawnMin: dateToDayMin(t.nauticalDawn, timezone),
-    astronomicalDuskMin: dateToDayMin(t.nauticalDusk, timezone),
+    // t.nightEnd = astronomical dawn; t.night = astronomical dusk.
+    astronomicalDawnMin: dateToDayMin(t.nightEnd, timezone),
+    astronomicalDuskMin: dateToDayMin(t.night, timezone),
   };
 }
 
 export function minToPercent(min: number): number {
-  return (min / 1440) * 100;
+  return Math.max(0, Math.min(100, (min / 1440) * 100));
 }

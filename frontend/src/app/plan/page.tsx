@@ -36,9 +36,10 @@ export default async function PlanPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#0a0a0a]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#0c0f16]">
       {/* Nav bar */}
       <nav
+        aria-label="Main navigation"
         style={{
           position: 'fixed',
           top: 0,
@@ -56,7 +57,6 @@ export default async function PlanPage() {
           padding: '0 28px',
         }}
       >
-        {/* Amber accent line */}
         <div
           style={{
             position: 'absolute',
@@ -67,8 +67,6 @@ export default async function PlanPage() {
             background: 'linear-gradient(to right, transparent, rgba(245,158,11,0.25), transparent)',
           }}
         />
-
-        {/* Left: Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Compass size={18} color="#f59e0b" />
           <span
@@ -83,8 +81,6 @@ export default async function PlanPage() {
             Roam
           </span>
         </div>
-
-        {/* Right: Email + divider + sign out */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <span
             style={{
@@ -106,9 +102,8 @@ export default async function PlanPage() {
         </div>
       </nav>
 
-      {/* Content area */}
       <main className="flex flex-1 overflow-hidden" style={{ paddingTop: '56px' }}>
-        <PlanLayout />
+        <PlanLayout userId={user.id} />
       </main>
     </div>
   )

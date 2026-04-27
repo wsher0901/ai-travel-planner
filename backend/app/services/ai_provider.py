@@ -17,17 +17,30 @@ class TravelAIProvider(ABC):
         pass
 
 
+# Module-level provider singleton cache — keyed by (provider_name, model | "default")
+_provider_cache: dict[tuple[str, str], TravelAIProvider] = {}
+
+
 def get_provider(provider_name: str, model: str | None = None) -> TravelAIProvider:
+    cache_key = (provider_name, model or "default")
+    if cache_key in _provider_cache:
+        return _provider_cache[cache_key]
+
+    provider: TravelAIProvider
     if provider_name == "gemini":
         from app.services.gemini_provider import GeminiProvider
-        return GeminiProvider(model=model) if model else GeminiProvider()
+        provider = GeminiProvider(model=model) if model else GeminiProvider()
     elif provider_name == "groq":
         from app.services.groq_provider import GroqProvider
-        return GroqProvider(model=model) if model else GroqProvider()
+        provider = GroqProvider(model=model) if model else GroqProvider()
     elif provider_name == "claude":
         from app.services.claude_provider import ClaudeProvider
-        return ClaudeProvider()
+        provider = ClaudeProvider()
     elif provider_name == "openrouter":
         from app.services.openrouter_provider import OpenRouterProvider
-        return OpenRouterProvider(model=model) if model else OpenRouterProvider()
-    raise ValueError("Unknown provider: " + provider_name)
+        provider = OpenRouterProvider(model=model) if model else OpenRouterProvider()
+    else:
+        raise ValueError("Unknown provider: " + provider_name)
+
+    _provider_cache[cache_key] = provider
+    return provider

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import { useTripStore } from '@/store/tripStore'
 import { useUIStore } from '@/store/uiStore'
@@ -28,10 +29,11 @@ export default function BudgetTab() {
   const { tripPlan, planItems } = useTripStore()
   const { setSelectedDate, setActiveTab } = useUIStore()
 
-  const currency = planItems[0]?.currency ?? 'USD'
-
   const stats = useMemo(() => {
     if (!tripPlan || planItems.length === 0) return null
+
+    // Derive currency inside useMemo so it stays reactive to planItems changes
+    const currency = planItems[0]?.currency ?? 'USD'
 
     const totalBudget = planItems.reduce((s, i) => s + (i.cost_estimate ?? 0), 0)
     const budgetCap = parseBudgetCap(tripPlan.budget_range)
@@ -63,7 +65,7 @@ export default function BudgetTab() {
       .map(([date, { total, count }]) => ({ date, total, count }))
       .sort((a, b) => a.date.localeCompare(b.date))
 
-    return { totalBudget, budgetCap, totalDays, avgPerDay, byCategory, byDay }
+    return { currency, totalBudget, budgetCap, totalDays, avgPerDay, byCategory, byDay }
   }, [tripPlan, planItems])
 
   if (!tripPlan) {
@@ -82,8 +84,10 @@ export default function BudgetTab() {
     )
   }
 
-  const { totalBudget, budgetCap, totalDays, avgPerDay, byCategory, byDay } = stats
-  const capPct = budgetCap ? Math.min((totalBudget / budgetCap) * 100, 100) : 0
+  const { currency, totalBudget, budgetCap, totalDays, avgPerDay, byCategory, byDay } = stats
+  // capPct is the true ratio (can exceed 100 when over budget)
+  const capPctRaw = budgetCap ? (totalBudget / budgetCap) * 100 : 0
+  const capPct = Math.min(capPctRaw, 100)
   const overBudget = budgetCap ? totalBudget > budgetCap : false
   const gaugeColor = overBudget ? 'rgb(239,68,68)' : 'rgb(245,158,11)'
   const maxDayTotal = Math.max(...byDay.map(d => d.total), 1)
@@ -96,7 +100,7 @@ export default function BudgetTab() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'auto' }}>
       {/* Section 1: Summary row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.5fr', gap: 12, height: 120, flexShrink: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1.5fr', gap: 12, minHeight: 120, flexShrink: 0 }}>
         {[
           { label: 'TOTAL BUDGET', value: formatCost(totalBudget, currency), sub: `${planItems.length} activities` },
           { label: 'AVG / DAY', value: formatCost(Math.round(avgPerDay), currency), sub: `${totalDays} days` },
@@ -119,10 +123,14 @@ export default function BudgetTab() {
           {budgetCap ? (
             <>
               <div style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${capPct}%`, borderRadius: 4, background: gaugeColor, transition: 'width 400ms ease' }} />
+                <motion.div
+                  animate={{ width: `${capPct}%` }}
+                  transition={{ duration: 0.4, ease: 'easeOut' }}
+                  style={{ height: '100%', borderRadius: 4, background: gaugeColor }}
+                />
               </div>
               <span style={{ fontFamily: 'var(--font-sora)', fontSize: 11, fontWeight: 600, color: gaugeColor }}>
-                {Math.round(capPct)}%
+                {overBudget ? `${Math.round(capPctRaw)}% — over budget` : `${Math.round(capPct)}%`}
               </span>
             </>
           ) : (
@@ -172,20 +180,11 @@ export default function BudgetTab() {
           const barWidth = (total / maxDayTotal) * 100
 
           return (
-            <div
+            <motion.div
               key={date}
               onClick={() => { setSelectedDate(date); setActiveTab('itinerary') }}
-              onMouseEnter={(e) => {
-                const el = e.currentTarget as HTMLDivElement
-                el.style.backgroundColor = 'rgba(6,182,212,0.05)'
-                el.style.borderColor = 'rgba(6,182,212,0.1)'
-              }}
-              onMouseLeave={(e) => {
-                const el = e.currentTarget as HTMLDivElement
-                el.style.backgroundColor = 'rgba(255,255,255,0.02)'
-                el.style.borderColor = 'rgba(255,255,255,0.04)'
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', marginBottom: 6, cursor: 'pointer', transition: 'background-color 150ms, border-color 150ms' }}
+              whileHover={{ backgroundColor: 'rgba(6,182,212,0.05)', borderColor: 'rgba(6,182,212,0.1)' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', marginBottom: 6, cursor: 'pointer' }}
             >
               <div style={{ width: 100, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span style={{ fontFamily: 'var(--font-sora)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.35)' }}>{weekday}</span>
@@ -201,7 +200,7 @@ export default function BudgetTab() {
                 {formatCost(total, currency)}
               </span>
               <ChevronRight size={14} color="rgba(255,255,255,0.3)" style={{ flexShrink: 0 }} />
-            </div>
+            </motion.div>
           )
         })}
       </div>

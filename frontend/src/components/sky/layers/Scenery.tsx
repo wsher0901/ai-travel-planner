@@ -12,14 +12,17 @@ interface Props { preset: SceneryPreset; }
 
 export default function Scenery({ preset }: Props) {
   return (
-    <div style={{
-      position: 'absolute',
-      bottom: 20,
-      left: 0, right: 0,
-      height: 30,
-      zIndex: 8,
-      background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.55) 100%)',
-      clipPath: CLIP_PATHS[preset],
-    }} />
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        bottom: 20,
+        left: 0, right: 0,
+        height: 30,
+        zIndex: 8,
+        background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.55) 100%)',
+        clipPath: CLIP_PATHS[preset],
+      }}
+    />
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { type PlanItem } from '@/store/tripStore';
@@ -31,12 +31,33 @@ export default function TripCalendar({
   onSelectDate,
 }: Props) {
   const tripStart = useMemo(() => new Date(tripStartDate + 'T00:00:00'), [tripStartDate]);
-  const [viewYear, setViewYear] = useState(tripStart.getFullYear());
-  const [viewMonth, setViewMonth] = useState(tripStart.getMonth());
-  useEffect(() => {
-    setViewYear(tripStart.getFullYear());
-    setViewMonth(tripStart.getMonth());
-  }, [tripStart]);
+  // Combine viewYear + viewMonth into a single piece of state that derives from
+  // tripStartDate on change. Using a ref to compare avoids the setState-in-effect
+  // cascading-render lint warning.
+  const [view, setView] = useState(() => ({
+    year: tripStart.getFullYear(),
+    month: tripStart.getMonth(),
+    trackedTripStart: tripStartDate,
+  }));
+  if (view.trackedTripStart !== tripStartDate) {
+    setView({
+      year: tripStart.getFullYear(),
+      month: tripStart.getMonth(),
+      trackedTripStart: tripStartDate,
+    });
+  }
+  const viewYear = view.year;
+  const viewMonth = view.month;
+  const setViewYear = (updater: number | ((y: number) => number)) =>
+    setView((v) => ({
+      ...v,
+      year: typeof updater === 'function' ? updater(v.year) : updater,
+    }));
+  const setViewMonth = (updater: number | ((m: number) => number)) =>
+    setView((v) => ({
+      ...v,
+      month: typeof updater === 'function' ? updater(v.month) : updater,
+    }));
 
   const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', {
     month: 'long',
@@ -59,6 +80,8 @@ export default function TripCalendar({
   const startPad = firstDayOfMonth.getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const todayISO = toISO(new Date());
+
+  const monthStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`;
 
   const cells: (number | null)[] = [
     ...Array(startPad).fill(null),
@@ -85,22 +108,11 @@ export default function TripCalendar({
         background: 'rgba(255,255,255,0.02)',
         border: '1px solid rgba(255,255,255,0.08)',
         overflow: 'hidden',
-        transition: 'border-color 200ms ease',
         display: 'flex',
         flexDirection: 'column',
       }}
     >
-      <style>{`
-        .trip-calendar-panel:hover {
-          background: linear-gradient(180deg, rgba(245,158,11,0.04) 0%, rgba(255,255,255,0.01) 100%) !important;
-          border-color: rgba(245,158,11,0.28) !important;
-        }
-        .trip-calendar-panel:hover .trip-calendar-bloom {
-          opacity: 1 !important;
-        }
-      `}</style>
       <div
-        className="trip-calendar-panel"
         style={{
           flex: 1,
           padding: 12,
@@ -108,7 +120,6 @@ export default function TripCalendar({
           background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
           border: '1px solid rgba(255,255,255,0.06)',
           boxShadow: 'inset 0 2px 1.5px 0 rgba(165,174,184,0.1)',
-          transition: 'background 300ms ease, border-color 300ms ease',
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
@@ -117,19 +128,6 @@ export default function TripCalendar({
           overflow: 'hidden',
         }}
       >
-        <div
-          className="trip-calendar-bloom"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(135deg, rgba(245,158,11,0.22) 0%, rgba(245,158,11,0.08) 30%, transparent 65%)',
-            opacity: 0,
-            transition: 'opacity 300ms ease',
-            pointerEvents: 'none',
-            zIndex: 0,
-            borderRadius: 16,
-          }}
-        />
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px', position: 'relative', zIndex: 1 }}>
@@ -162,52 +160,38 @@ export default function TripCalendar({
               color: 'rgba(255,255,255,0.55)',
               fontFamily: 'var(--font-sora)',
             }}>
-              {tripStartDate.slice(5).replace('-', '/')} – {tripEndDate.slice(5).replace('-', '/')}
+              {tripStartDate.slice(5).replaceAll('-', '/')} – {tripEndDate.slice(5).replaceAll('-', '/')}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 2 }}>
-            <button
+            <motion.button
+              type="button"
               onClick={prevMonth}
+              whileHover={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}
               style={{
                 width: 24, height: 24, borderRadius: 6,
                 background: 'transparent',
                 border: 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: 'rgba(255,255,255,0.4)', cursor: 'pointer',
-                transition: 'all 150ms ease',
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)';
-                (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.85)';
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-                (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.4)';
               }}
             >
               <ChevronLeft size={14} />
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              type="button"
               onClick={nextMonth}
+              whileHover={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}
               style={{
                 width: 24, height: 24, borderRadius: 6,
                 background: 'transparent',
                 border: 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: 'rgba(255,255,255,0.4)', cursor: 'pointer',
-                transition: 'all 150ms ease',
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)';
-                (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.85)';
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-                (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.4)';
               }}
             >
               <ChevronRight size={14} />
-            </button>
+            </motion.button>
           </div>
         </div>
 
@@ -250,7 +234,7 @@ export default function TripCalendar({
         }}>
           {cells.map((day, idx) => {
             if (day === null) {
-              return <div key={`pad-${idx}`} />;
+              return <div key={`pad-${monthStr}-${idx}`} />;
             }
 
             const dateStr = toISO(new Date(viewYear, viewMonth, day));
@@ -264,6 +248,16 @@ export default function TripCalendar({
               <div
                 key={dateStr}
                 onClick={() => inTrip && onSelectDate(dateStr)}
+                onMouseEnter={(e) => {
+                  if (inTrip) {
+                    const bloom = (e.currentTarget as HTMLDivElement).querySelector('.cell-hover-bloom') as HTMLDivElement | null;
+                    if (bloom) bloom.style.opacity = '1';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  const bloom = (e.currentTarget as HTMLDivElement).querySelector('.cell-hover-bloom') as HTMLDivElement | null;
+                  if (bloom) bloom.style.opacity = '0';
+                }}
                 style={{
                   position: 'relative',
                   display: 'flex',
@@ -275,11 +269,26 @@ export default function TripCalendar({
                   padding: 2,
                 }}
               >
+                {inTrip && (
+                  <div
+                    className="cell-hover-bloom"
+                    style={{
+                      position: 'absolute',
+                      inset: -2,
+                      borderRadius: 12,
+                      background: 'radial-gradient(circle at center, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0.05) 50%, transparent 80%)',
+                      opacity: 0,
+                      transition: 'opacity 200ms ease',
+                      pointerEvents: 'none',
+                      zIndex: -1,
+                    }}
+                  />
+                )}
                 {/* Filled circle for in-trip or selected */}
                 {inTrip && (
                   <>
                     {isSelected ? (
-                      <AnimatePresence mode="popLayout">
+                      <AnimatePresence>
                         <motion.div
                           key={dateStr}
                           initial={{ opacity: 0 }}
@@ -328,15 +337,15 @@ export default function TripCalendar({
                         />
                       </AnimatePresence>
                     ) : (
-                      <div
-                        className="day-circle"
+                      <motion.div
+                        whileHover={{ background: 'rgb(245,158,11)', boxShadow: '0 0 12px rgba(245,158,11,0.35)' }}
+                        transition={{ duration: 0.15 }}
                         style={{
                           position: 'absolute',
                           width: 36,
                           height: 36,
                           borderRadius: 10,
                           background: 'rgba(245,158,11,0.85)',
-                          transition: 'all 200ms ease',
                           zIndex: 1,
                         }}
                       />

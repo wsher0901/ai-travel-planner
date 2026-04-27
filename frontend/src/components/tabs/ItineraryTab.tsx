@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { useUIStore } from '@/store/uiStore';
 import { useTripStore } from '@/store/tripStore';
 import ActivityList from './itinerary/ActivityList';
 import AddActivityDialog from './itinerary/AddActivityDialog';
+import ScrollArea, { type ScrollAreaHandle } from '@/components/ui/ScrollArea';
 
 function formatDayLabel(iso: string | null): string {
   if (!iso) return '';
@@ -14,11 +15,38 @@ function formatDayLabel(iso: string | null): string {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
+// Shared slide variant config — avoids duplication between header and list AnimatePresence
+const slideVariants = {
+  enter: (direction: number) => ({ x: direction * 120, opacity: 0.2 }),
+  center: { x: 0, opacity: 1 },
+  exit: (direction: number) => ({ x: direction * -120, opacity: 0 }),
+};
+
+const slideTransition = {
+  x: { duration: 0.44, ease: [0.4, 0, 0.2, 1] as const },
+  opacity: { duration: 0.22, ease: 'easeOut' as const },
+};
+
 export default function ItineraryTab() {
   const selectedDate = useUIStore((s) => s.selectedDate);
   const dateChangeDirection = useUIStore((s) => s.dateChangeDirection);
+  const setItineraryScrollHandle = useUIStore((s) => s.setItineraryScrollHandle);
   const { tripPlan, planItems } = useTripStore();
   const [addOpen, setAddOpen] = useState(false);
+  const scrollAreaRef = useRef<ScrollAreaHandle | null>(null);
+
+  const handleScrollAreaRef = useCallback((handle: ScrollAreaHandle | null) => {
+    if (handle) {
+      scrollAreaRef.current = handle;
+      setItineraryScrollHandle(handle);
+    }
+  }, [setItineraryScrollHandle]);
+
+  useEffect(() => {
+    return () => {
+      setItineraryScrollHandle(null);
+    };
+  }, [setItineraryScrollHandle]);
 
   const dayItems = useMemo(() => {
     if (!selectedDate) return [];
@@ -85,30 +113,23 @@ export default function ItineraryTab() {
           </span>
           <div style={{
             position: 'relative',
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: 10,
             overflow: 'hidden',
-            minWidth: 0,
-            flex: 1,
+            minWidth: 320,
+            height: 22,
           }}>
-            <AnimatePresence mode="popLayout" custom={dateChangeDirection} initial={false}>
+            <AnimatePresence mode="sync" custom={dateChangeDirection} initial={false}>
               <motion.div
                 key={selectedDate ?? 'no-date'}
                 custom={dateChangeDirection}
-                variants={{
-                  enter: (direction: number) => ({ x: direction * 120, opacity: 0.2 }),
-                  center: { x: 0, opacity: 1 },
-                  exit: (direction: number) => ({ x: direction * -120, opacity: 0 }),
-                }}
+                variants={slideVariants}
                 initial="enter"
                 animate="center"
                 exit="exit"
-                transition={{
-                  x: { duration: 0.44, ease: [0.4, 0, 0.2, 1] },
-                  opacity: { duration: 0.22, ease: 'easeOut' },
-                }}
+                transition={slideTransition}
                 style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
                   display: 'flex',
                   alignItems: 'baseline',
                   gap: 10,
@@ -134,8 +155,12 @@ export default function ItineraryTab() {
             </AnimatePresence>
           </div>
         </div>
-        <button
+        <motion.button
           onClick={() => setAddOpen(true)}
+          whileHover={{
+            backgroundColor: 'rgba(6,182,212,0.15)',
+            borderColor: 'rgba(6,182,212,0.45)',
+          }}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             background: 'rgba(6,182,212,0.08)',
@@ -146,58 +171,41 @@ export default function ItineraryTab() {
             fontSize: 12, fontWeight: 500,
             fontFamily: 'var(--font-sora)',
             cursor: 'pointer',
-            transition: 'all 150ms ease',
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(6,182,212,0.15)';
-            (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(6,182,212,0.45)';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(6,182,212,0.08)';
-            (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(6,182,212,0.25)';
           }}
         >
           <Plus size={12} />
           Add activity
-        </button>
+        </motion.button>
       </div>
 
       {/* Activity list */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
-        <AnimatePresence mode="popLayout" custom={dateChangeDirection} initial={false}>
+        <AnimatePresence mode="sync" custom={dateChangeDirection} initial={false}>
           <motion.div
             key={selectedDate ?? 'no-date-list'}
             custom={dateChangeDirection}
-            variants={{
-              enter: (direction: number) => ({ x: direction * 120, opacity: 0.2 }),
-              center: { x: 0, opacity: 1 },
-              exit: (direction: number) => ({ x: direction * -120, opacity: 0 }),
-            }}
+            variants={slideVariants}
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{
-              x: { duration: 0.44, ease: [0.4, 0, 0.2, 1] },
-              opacity: { duration: 0.22, ease: 'easeOut' },
-            }}
+            transition={slideTransition}
             style={{
               position: 'absolute',
               inset: 0,
-              overflow: 'auto',
             }}
           >
-            <ActivityList dayItems={dayItems} selectedDate={selectedDate} tripPlan={tripPlan} />
+            <ScrollArea ref={handleScrollAreaRef} style={{ width: '100%', height: '100%' }}>
+              <ActivityList key={selectedDate ?? 'no-date'} dayItems={dayItems} selectedDate={selectedDate} tripPlan={tripPlan} />
+            </ScrollArea>
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {selectedDate && (
-        <AddActivityDialog
-          open={addOpen}
-          onClose={() => setAddOpen(false)}
-          selectedDate={selectedDate}
-        />
-      )}
+      <AddActivityDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        selectedDate={selectedDate}
+      />
     </div>
   );
 }

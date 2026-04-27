@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Sun, Cloud, CloudRain, CloudSnow, CheckCircle2, Circle } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Sun, Cloud, CloudRain, CheckCircle2, Circle } from 'lucide-react'
 import { useTripStore } from '@/store/tripStore'
 import { useUIStore } from '@/store/uiStore'
 import { getActivityColor } from '@/lib/activityColors'
@@ -29,6 +30,7 @@ function getDaysInRange(start: string, end: string): string[] {
   return days
 }
 
+// TODO(phase-2): replace with Open-Meteo API
 function getWeatherForIdx(idx: number) {
   const cycle = idx % 4
   if (cycle === 0 || cycle === 2) return { icon: Sun, color: 'rgba(251,191,36,0.7)', label: 'sunny' }
@@ -45,10 +47,11 @@ export default function WeatherTab() {
   const dayItems = useMemo(() => {
     if (!selectedDate) return []
     return planItems
-      .filter(item => item.date === selectedDate)
+      // Normalize date to YYYY-MM-DD for consistent comparison across tabs
+      .filter(item => item.date?.slice(0, 10) === selectedDate)
       .sort((a, b) => {
         if (a.start_time && b.start_time) return a.start_time.localeCompare(b.start_time)
-        return a.sort_order - b.sort_order
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0)
       })
   }, [planItems, selectedDate])
 
@@ -57,9 +60,18 @@ export default function WeatherTab() {
     return getDaysInRange(tripPlan.start_date, tripPlan.end_date)
   }, [tripPlan])
 
+  // Build a Map for O(n) day index lookup instead of O(n²) indexOf inside the render loop
+  const tripDayMap = useMemo(() => {
+    const m = new Map<string, number>()
+    tripDays.forEach((d, i) => m.set(d, i))
+    return m
+  }, [tripDays])
+
   const hourlyTemps = useMemo(() => {
+    // Half-sine curve: peaks at noon (i=12), zero at midnight.
+    // +8 is a placeholder temperature bias; replace with Open-Meteo data in phase-2.
     return Array.from({ length: 24 }, (_, i) =>
-      Math.round(55 + Math.sin((i / 24) * Math.PI * 2) * 10 + 8)
+      Math.round(55 + Math.sin((i / 24) * Math.PI) * 10 + 8)
     )
   }, [])
 
@@ -78,12 +90,6 @@ export default function WeatherTab() {
   const maxTemp = Math.max(...hourlyTemps) + 5
   const range = maxTemp - minTemp
   const mapY = (t: number) => 140 - ((t - minTemp) / range) * 100 - 20
-
-  const pathPoints = hourlyTemps.map((t, i) => {
-    const x = (i / 23) * 600
-    const y = mapY(t)
-    return `${x},${y}`
-  })
 
   const curvePath = `M 0,${mapY(hourlyTemps[0])} ` + hourlyTemps.slice(1).map((t, i) => `L ${((i + 1) / 23) * 600},${mapY(t)}`).join(' ')
   const fillPath = `M 0 140 L ${curvePath.slice(2)} L 600 140 Z`
@@ -114,15 +120,15 @@ export default function WeatherTab() {
             const low = 58 + (idx % 3)
 
             return (
-              <div
+              <motion.div
                 key={date}
                 onClick={() => setSelectedDate(date)}
+                whileHover={!isSelected ? { backgroundColor: 'rgba(6,182,212,0.05)', borderColor: 'rgba(6,182,212,0.15)' } : undefined}
                 style={{
                   flex: 1, minWidth: 80, cursor: 'pointer', borderRadius: 10, padding: 10,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                   background: isSelected ? 'rgba(245,158,11,0.08)' : 'rgba(255,255,255,0.02)',
                   border: isSelected ? '1px solid rgba(245,158,11,0.3)' : '1px solid rgba(255,255,255,0.05)',
-                  transition: 'background 0.15s, border-color 0.15s',
                 }}
               >
                 <span style={{ fontFamily: 'var(--font-sora)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.45)', fontWeight: 500 }}>{weekday}</span>
@@ -132,7 +138,7 @@ export default function WeatherTab() {
                   <span style={{ fontFamily: 'var(--font-sora)', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums' }}>{high}°</span>
                   <span style={{ fontFamily: 'var(--font-sora)', fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', fontVariantNumeric: 'tabular-nums' }}>{low}°</span>
                 </div>
-              </div>
+              </motion.div>
             )
           })}
         </div>
@@ -144,11 +150,11 @@ export default function WeatherTab() {
           <span style={{ fontFamily: 'var(--font-sora)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.4)' }}>Hourly</span>
           <span style={{ fontFamily: 'var(--font-sora)', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>°F</span>
         </div>
-        <svg width="100%" height="140" viewBox="0 0 600 140" preserveAspectRatio="none">
-          <path d={fillPath} fill="rgba(245,158,11,0.08)" />
-          <path d={curvePath} fill="none" stroke="rgb(245,158,11)" strokeWidth="2" strokeLinejoin="round" />
+        <svg aria-label="24-hour temperature forecast" width="100%" height="140" viewBox="0 0 600 140" preserveAspectRatio="none">
+          <path d={fillPath} fill="rgba(6,182,212,0.08)" />
+          <path d={curvePath} fill="none" stroke="rgb(6,182,212)" strokeWidth="2" strokeLinejoin="round" />
           {HOUR_LABELS.map(({ label, x }) => (
-            <text key={label} x={x} y={135} fontSize="9" fill="rgba(255,255,255,0.4)" fontFamily="monospace" textAnchor={x === 0 ? 'start' : x >= 590 ? 'end' : 'middle'}>
+            <text key={label} x={x} y={135} fontSize="9" fill="rgba(255,255,255,0.4)" fontFamily="var(--font-geist-mono)" textAnchor={x === 0 ? 'start' : x >= 590 ? 'end' : 'middle'}>
               {label}
             </text>
           ))}
@@ -173,7 +179,7 @@ export default function WeatherTab() {
           </div>
         ) : (
           dayItems.map((item) => {
-            const dayIdx = tripDays.indexOf(selectedDate ?? '')
+            const dayIdx = tripDayMap.get(selectedDate ?? '') ?? -1
             const weather = getWeatherForIdx(dayIdx)
             const isOutdoor = OUTDOOR_TYPES.has(item.activity_type)
             const isIndoor = item.activity_type === 'food' || item.activity_type === 'accommodation'

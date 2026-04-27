@@ -1,14 +1,15 @@
 'use client'
 
+import * as React from 'react'
 import { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CalendarDays, Map, CloudSun, Wallet, Gauge } from 'lucide-react'
 import { useUIStore } from '@/store/uiStore'
 
 type TabId = 'itinerary' | 'map' | 'weather' | 'budget' | 'score'
 
-const TABS: { id: TabId; icon: React.ElementType; label: string }[] = [
-  { id: 'itinerary', icon: CalendarDays, label: 'Itinerary' },
+const TABS: { id: TabId; icon: React.ElementType; label: string }[] = [  { id: 'itinerary', icon: CalendarDays, label: 'Itinerary' },
   { id: 'map', icon: Map, label: 'Map' },
   { id: 'weather', icon: CloudSun, label: 'Weather' },
   { id: 'budget', icon: Wallet, label: 'Budget' },
@@ -26,29 +27,37 @@ function TabButton({
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
   const Icon = tab.icon
 
   const handleMouseEnter = () => {
-    tooltipTimer.current = setTimeout(() => setShowTooltip(true), 400)
+    tooltipTimer.current = setTimeout(() => {
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect()
+        setTooltipPos({ x: rect.right + 8, y: rect.top + rect.height / 2 })
+      }
+      setShowTooltip(true)
+    }, 400)
   }
 
   const handleMouseLeave = () => {
     if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
     setShowTooltip(false)
+    setTooltipPos(null)
   }
 
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <button
+      <motion.button
+        ref={buttonRef}
+        role="tab"
+        aria-selected={isActive}
+        aria-label={tab.label}
         onClick={onClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        onMouseOver={(e) => {
-          if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(6,182,212,0.06)'
-        }}
-        onMouseOut={(e) => {
-          if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
-        }}
+        whileHover={!isActive ? { background: 'rgba(6,182,212,0.06)' } : {}}
         style={{
           position: 'relative',
           width: 40,
@@ -60,7 +69,6 @@ function TabButton({
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
-          transition: 'background 0.15s',
         }}
       >
         {isActive && (
@@ -84,19 +92,19 @@ function TabButton({
           color={isActive ? 'rgb(245,158,11)' : 'rgba(255,255,255,0.4)'}
           style={{ transition: 'color 0.15s' }}
         />
-      </button>
+      </motion.button>
 
       <AnimatePresence>
-        {showTooltip && (
+        {showTooltip && tooltipPos && typeof document !== 'undefined' && createPortal(
           <motion.div
             initial={{ opacity: 0, x: -4 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -4 }}
             transition={{ duration: 0.12 }}
             style={{
-              position: 'absolute',
-              left: 64,
-              top: '50%',
+              position: 'fixed',
+              left: tooltipPos.x,
+              top: tooltipPos.y,
               transform: 'translateY(-50%)',
               background: 'rgba(12,15,22,0.95)',
               border: '1px solid rgba(6,182,212,0.2)',
@@ -106,12 +114,13 @@ function TabButton({
               color: 'rgba(255,255,255,0.9)',
               borderRadius: 6,
               whiteSpace: 'nowrap',
-              zIndex: 100,
+              zIndex: 9999,
               pointerEvents: 'none',
             }}
           >
             {tab.label}
-          </motion.div>
+          </motion.div>,
+          document.body
         )}
       </AnimatePresence>
     </div>

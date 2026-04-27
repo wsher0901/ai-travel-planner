@@ -6,9 +6,14 @@ import { ArrowUp, ArrowRight, Compass, Plus, X, Sparkles, SlidersHorizontal, Mes
 import ReactMarkdown from 'react-markdown'
 import SliderPanel from './SliderPanel'
 import { useChatStore } from '@/store/chatStore'
-import { useTripStore } from '@/store/tripStore'
+import { useTripStore, PlanItem } from '@/store/tripStore'
 import { useUIStore } from '@/store/uiStore'
+import { useTripsIndexStore } from '@/store/tripsIndexStore'
+import { useHistoryStore } from '@/store/historyStore'
 import { createClient } from '@/lib/supabase'
+import { apiPost, apiStream } from '@/lib/api'
+import { SESSION_KEYS } from '@/lib/sessionKeys'
+import ScrollArea, { type ScrollAreaHandle } from '@/components/ui/ScrollArea'
 
 // ── Color config ───────────────────────────────────────────────────────────
 const CHAT_COLOR = {
@@ -16,24 +21,6 @@ const CHAT_COLOR = {
   glow: 'radial-gradient(ellipse at 50% 60%, rgba(245,158,11,0.12) 0%, rgba(245,158,11,0.03) 40%, transparent 70%)',
   headlineColor: '#fbbf24',
   chipBorder: 'rgba(245,158,11,0.35)',
-}
-
-// ── Streaming dots ─────────────────────────────────────────────────────────
-function StreamingDots({ modeColor }: { modeColor: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <div style={{ width: '48px', height: '4px', borderRadius: '2px', overflow: 'hidden', background: 'rgba(255,255,255,0.06)' }}>
-        <motion.div
-          style={{ height: '100%', width: '50%', borderRadius: '2px', background: modeColor, opacity: 0.6 }}
-          animate={{ x: ['-100%', '200%'] }}
-          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-        />
-      </div>
-      <span style={{ fontSize: '12px', color: modeColor, opacity: 0.5, fontFamily: 'var(--font-sora)', fontStyle: 'italic' }}>
-        thinking
-      </span>
-    </div>
-  )
 }
 
 // ── Post-plan CTA ──────────────────────────────────────────────────────────
@@ -56,52 +43,46 @@ function PostPlanCTA() {
 
   return (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
-      <button
+      <motion.button
         onClick={() => setLayoutMode('split')}
+        whileHover={{ background: 'rgba(245,158,11,0.25)' }}
         style={{
           ...btnBase,
           background: 'rgba(245,158,11,0.15)',
           border: '1px solid rgba(245,158,11,0.4)',
           color: '#fbbf24',
         }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.25)' }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(245,158,11,0.15)' }}
       >
         Open Visual Planner ✨
-      </button>
-      <button
+      </motion.button>
+      <motion.button
         onClick={() => {
           clearMessages()
           setSessionId(null)
           useTripStore.getState().clearTrip()
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem(SESSION_KEYS.ACTIVE_TRIP_ID)
+          }
+          setLayoutMode('discovery')
         }}
+        whileHover={{ borderColor: 'rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.7)' }}
         style={{
           ...btnBase,
           background: 'rgba(255,255,255,0.06)',
           border: '1px solid rgba(255,255,255,0.12)',
           color: 'rgba(255,255,255,0.5)',
         }}
-        onMouseEnter={(e) => {
-          const el = e.currentTarget as HTMLButtonElement
-          el.style.border = '1px solid rgba(255,255,255,0.25)'
-          el.style.color = 'rgba(255,255,255,0.7)'
-        }}
-        onMouseLeave={(e) => {
-          const el = e.currentTarget as HTMLButtonElement
-          el.style.border = '1px solid rgba(255,255,255,0.12)'
-          el.style.color = 'rgba(255,255,255,0.5)'
-        }}
       >
         Start a New Plan
-      </button>
+      </motion.button>
     </div>
   )
 }
 
 // ── Message bubble ─────────────────────────────────────────────────────────
-function MessageBubble({ role, content, modeColor, isTyping, timestamp }: { role: 'user' | 'assistant'; content: string; modeColor: string; isTyping?: boolean; timestamp: Date }) {
+function MessageBubble({ role, content, modeColor, isTyping, timestamp }: { role: 'user' | 'assistant'; content: string; modeColor: string; isTyping?: boolean; timestamp: string }) {
   const isUser = role === 'user'
-  const timeStr = timestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   const CTA_MARKER = '[CTA:POST_PLAN]'
   const hasCTA = !isUser && content.includes(CTA_MARKER)
   const textContent = hasCTA ? content.replace(CTA_MARKER, '').trimEnd() : content
@@ -196,7 +177,6 @@ function MessageBubble({ role, content, modeColor, isTyping, timestamp }: { role
 
 // ── Input pill ─────────────────────────────────────────────────────────────
 function InputPill({
-  slidersOpen,
   onToggleSliders,
   input,
   onInputChange,
@@ -445,6 +425,52 @@ function MenuItemButton({ icon, label, labelColor, onClick }: { icon: React.Reac
   )
 }
 
+// ── Static card config (hoisted to avoid recreation on every render) ────────
+const EMPTY_STATE_CARDS = [
+  {
+    icon: <Sparkles size={20} color="rgb(245,158,11)" />,
+    title: 'Plan a trip for me',
+    subtitle: "Share your dates and we'll handle everything",
+    placeholder: 'Tell me your dates, budget, and any preferences...',
+    enableZeroShot: true,
+    isPrimary: true,
+    borderGradient: 'linear-gradient(135deg, rgba(245,158,11,0.35) 0%, rgba(245,158,11,0.08) 50%, rgba(245,158,11,0.2) 100%)',
+    borderGradientHover: 'linear-gradient(135deg, rgba(245,158,11,0.5) 0%, rgba(245,158,11,0.15) 50%, rgba(245,158,11,0.35) 100%)',
+    bottomLineGradient: 'linear-gradient(90deg, transparent 0%, rgba(245,158,11,0.5) 50%, transparent 100%)',
+    hoverShadow: '0 8px 40px rgba(245,158,11,0.15), 0 2px 8px rgba(245,158,11,0.1)',
+    iconGlow: 'drop-shadow(0 0 6px rgba(245,158,11,0.4))',
+    iconBgGlow: 'radial-gradient(circle, rgba(245,158,11,0.2) 0%, transparent 70%)',
+  },
+  {
+    icon: <MessageCircle size={20} color="rgba(6,182,212,0.7)" />,
+    title: 'Help me figure it out',
+    subtitle: "Not sure yet? Let's explore ideas together",
+    placeholder: 'What kind of trip are you dreaming about?',
+    enableZeroShot: false,
+    isPrimary: false,
+    borderGradient: 'linear-gradient(135deg, rgba(6,182,212,0.25) 0%, rgba(6,182,212,0.05) 50%, rgba(6,182,212,0.15) 100%)',
+    borderGradientHover: 'linear-gradient(135deg, rgba(6,182,212,0.5) 0%, rgba(6,182,212,0.15) 50%, rgba(6,182,212,0.35) 100%)',
+    bottomLineGradient: 'linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.5) 50%, transparent 100%)',
+    hoverShadow: '0 8px 40px rgba(6,182,212,0.15), 0 2px 8px rgba(6,182,212,0.1)',
+    iconGlow: 'drop-shadow(0 0 6px rgba(6,182,212,0.4))',
+    iconBgGlow: 'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
+  },
+  {
+    icon: <ClipboardCheck size={20} color="rgba(6,182,212,0.7)" />,
+    title: 'Improve my existing plan',
+    subtitle: "We'll grade it and suggest upgrades",
+    placeholder: 'Describe or paste your existing plan...',
+    enableZeroShot: false,
+    isPrimary: false,
+    borderGradient: 'linear-gradient(135deg, rgba(6,182,212,0.25) 0%, rgba(6,182,212,0.05) 50%, rgba(6,182,212,0.15) 100%)',
+    borderGradientHover: 'linear-gradient(135deg, rgba(6,182,212,0.5) 0%, rgba(6,182,212,0.15) 50%, rgba(6,182,212,0.35) 100%)',
+    bottomLineGradient: 'linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.5) 50%, transparent 100%)',
+    hoverShadow: '0 8px 40px rgba(6,182,212,0.15), 0 2px 8px rgba(6,182,212,0.1)',
+    iconGlow: 'drop-shadow(0 0 6px rgba(6,182,212,0.4))',
+    iconBgGlow: 'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
+  },
+]
+
 // ── Empty state ────────────────────────────────────────────────────────────
 function EmptyState({
   onCardClick,
@@ -453,50 +479,7 @@ function EmptyState({
 }) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
 
-  const cards = [
-    {
-      icon: <Sparkles size={20} color="rgb(245,158,11)" />,
-      title: 'Plan a trip for me',
-      subtitle: "Share your dates and we'll handle everything",
-      placeholder: 'Tell me your dates, budget, and any preferences...',
-      enableZeroShot: true,
-      isPrimary: true,
-      borderGradient: 'linear-gradient(135deg, rgba(245,158,11,0.35) 0%, rgba(245,158,11,0.08) 50%, rgba(245,158,11,0.2) 100%)',
-      borderGradientHover: 'linear-gradient(135deg, rgba(245,158,11,0.5) 0%, rgba(245,158,11,0.15) 50%, rgba(245,158,11,0.35) 100%)',
-      bottomLineGradient: 'linear-gradient(90deg, transparent 0%, rgba(245,158,11,0.5) 50%, transparent 100%)',
-      hoverShadow: '0 8px 40px rgba(245,158,11,0.15), 0 2px 8px rgba(245,158,11,0.1)',
-      iconGlow: 'drop-shadow(0 0 6px rgba(245,158,11,0.4))',
-      iconBgGlow: 'radial-gradient(circle, rgba(245,158,11,0.2) 0%, transparent 70%)',
-    },
-    {
-      icon: <MessageCircle size={20} color="rgba(6,182,212,0.7)" />,
-      title: 'Help me figure it out',
-      subtitle: "Not sure yet? Let's explore ideas together",
-      placeholder: 'What kind of trip are you dreaming about?',
-      enableZeroShot: false,
-      isPrimary: false,
-      borderGradient: 'linear-gradient(135deg, rgba(6,182,212,0.25) 0%, rgba(6,182,212,0.05) 50%, rgba(6,182,212,0.15) 100%)',
-      borderGradientHover: 'linear-gradient(135deg, rgba(6,182,212,0.5) 0%, rgba(6,182,212,0.15) 50%, rgba(6,182,212,0.35) 100%)',
-      bottomLineGradient: 'linear-gradient(90deg, transparent 0%, rgba(6,182,212,0.5) 50%, transparent 100%)',
-      hoverShadow: '0 8px 40px rgba(6,182,212,0.15), 0 2px 8px rgba(6,182,212,0.1)',
-      iconGlow: 'drop-shadow(0 0 6px rgba(6,182,212,0.4))',
-      iconBgGlow: 'radial-gradient(circle, rgba(6,182,212,0.2) 0%, transparent 70%)',
-    },
-    {
-      icon: <ClipboardCheck size={20} color="rgba(168,139,250,0.7)" />,
-      title: 'Improve my existing plan',
-      subtitle: "We'll grade it and suggest upgrades",
-      placeholder: 'Describe or paste your existing plan...',
-      enableZeroShot: false,
-      isPrimary: false,
-      borderGradient: 'linear-gradient(135deg, rgba(168,139,250,0.25) 0%, rgba(168,139,250,0.05) 50%, rgba(168,139,250,0.15) 100%)',
-      borderGradientHover: 'linear-gradient(135deg, rgba(168,139,250,0.5) 0%, rgba(168,139,250,0.15) 50%, rgba(168,139,250,0.35) 100%)',
-      bottomLineGradient: 'linear-gradient(90deg, transparent 0%, rgba(168,139,250,0.5) 50%, transparent 100%)',
-      hoverShadow: '0 8px 40px rgba(168,139,250,0.15), 0 2px 8px rgba(168,139,250,0.1)',
-      iconGlow: 'drop-shadow(0 0 6px rgba(168,139,250,0.4))',
-      iconBgGlow: 'radial-gradient(circle, rgba(168,139,250,0.2) 0%, transparent 70%)',
-    },
-  ]
+  const cards = EMPTY_STATE_CARDS
 
   return (
     <div
@@ -659,7 +642,7 @@ function EmptyState({
                     <span style={{ fontSize: titleSize, fontWeight: 600, color: isHovered ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.85)', fontFamily: 'var(--font-sora)', transition: 'color 300ms ease' }}>
                       {card.title}
                     </span>
-                    <span style={{ fontSize: '13px', color: isHovered ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.4)', lineHeight: 1.4, transition: 'color 300ms ease' }}>
+                    <span style={{ fontSize: '13px', color: isHovered ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.4)', lineHeight: 1.4, transition: 'color 300ms ease', fontFamily: 'var(--font-geist-sans)' }}>
                       {card.subtitle}
                     </span>
                   </div>
@@ -708,7 +691,7 @@ function EmptyState({
       {/* Footer with vertical connector */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 1 }}>
         <div style={{ width: '1px', height: '16px', backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: '6px' }} />
-        <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)', margin: 0 }}>
+        <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)', margin: 0, fontFamily: 'var(--font-geist-sans)' }}>
           Or just start typing below
         </p>
       </div>
@@ -735,7 +718,7 @@ export default function ChatInterface() {
   const [hasStarted, setHasStarted] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
   const [customPlaceholder, setCustomPlaceholder] = useState<string | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollAreaRef = useRef<ScrollAreaHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleCardClick = useCallback((placeholder: string, enableZeroShot: boolean) => {
@@ -750,7 +733,7 @@ export default function ChatInterface() {
 
   // Auto-scroll on new messages or streaming updates
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    scrollAreaRef.current?.scrollToBottom()
   }, [messages])
 
   // Auto-resize textarea
@@ -764,13 +747,9 @@ export default function ChatInterface() {
   // Helper: add a placeholder assistant bubble and return its id
   const addPlaceholder = useCallback(() => {
     const id = crypto.randomUUID()
-    useChatStore.getState().messages.push({
-      id,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
-    })
-    useChatStore.setState({ messages: [...useChatStore.getState().messages] })
+    useChatStore.setState((s) => ({
+      messages: [...s.messages, { id, role: 'assistant' as const, content: '', timestamp: new Date().toISOString() }],
+    }))
     setStreamingId(id)
     return id
   }, [])
@@ -783,20 +762,12 @@ export default function ChatInterface() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/plan/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: trimmed,
-          session_id: null,
-          user_id: user?.id ?? null,
-          sliders,
-        }),
+      const data = await apiPost<Record<string, unknown>>('/plan/generate', {
+        message: trimmed,
+        session_id: null,
+        user_id: user?.id ?? null,
+        sliders,
       })
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-      const data = await res.json()
 
       const summary = [
         `✈ ${data.destination}`,
@@ -809,32 +780,63 @@ export default function ChatInterface() {
       let accumulated = ''
       for (const word of words) {
         accumulated += (accumulated ? ' ' : '') + word
-        updateMessage(assistantId, accumulated)
+        updateMessage(assistantId, { content: accumulated })
         await new Promise(r => setTimeout(r, 25))
       }
 
-      setSessionId(data.trip_plan_id)
+      setSessionId(data.trip_plan_id as string)
 
-      useTripStore.getState().setTripPlan({
-        id: data.trip_plan_id,
-        destination: data.destination,
-        origin_city: data.origin_city || null,
-        start_date: data.start_date,
-        end_date: data.end_date,
-        budget_range: data.budget_range || '',
-        destination_timezone: data.destination_timezone || null,
-        destination_latitude: data.destination_latitude || null,
-        destination_longitude: data.destination_longitude || null,
-        number_of_travelers: data.number_of_travelers || 1,
-        user_timezone: data.user_timezone || null,
+      const newTripPlan = {
+        id: data.trip_plan_id as string,
+        destination: data.destination as string,
+        origin_city: (data.origin_city as string) || null,
+        start_date: data.start_date as string,
+        end_date: data.end_date as string,
+        budget_range: (data.budget_range as string) || '',
+        destination_timezone: (data.destination_timezone as string) || null,
+        destination_latitude: (data.destination_latitude as number) || null,
+        destination_longitude: (data.destination_longitude as number) || null,
+        number_of_travelers: (data.number_of_travelers as number) || 1,
+        user_timezone: (data.user_timezone as string) || null,
+      }
+      const newPlanItems = (data.plan_items || data.items || []) as PlanItem[]
+      useTripStore.getState().setTripPlan(newTripPlan)
+      useTripStore.getState().setPlanItems(newPlanItems)
+
+      if (typeof window !== 'undefined' && newTripPlan.id) {
+        sessionStorage.setItem(SESSION_KEYS.ACTIVE_TRIP_ID, newTripPlan.id)
+      }
+
+      useTripsIndexStore.getState().addTripToIndex({
+        id: newTripPlan.id,
+        destination: newTripPlan.destination,
+        start_date: newTripPlan.start_date,
+        end_date: newTripPlan.end_date,
+        created_at: new Date().toISOString(),
+        item_count: newPlanItems.length,
       })
-      useTripStore.getState().setPlanItems(data.plan_items || data.items || [])
+
+      useHistoryStore.getState().recordEvent({
+        tripPlanId: newTripPlan.id,
+        sessionId: null,
+        userId: user?.id ?? null,
+        eventType: 'plan_generated',
+        actor: 'ai',
+        context: {
+          destination: newTripPlan.destination,
+          days: newPlanItems.length > 0
+            ? Math.max(...newPlanItems.map((i) => i.day_number ?? 1))
+            : 0,
+          itemCount: newPlanItems.length,
+        },
+      }).catch((e) => console.warn('[plan_generated] event failed:', e))
 
       await new Promise(r => setTimeout(r, 1500))
       const ctaText = "Your trip plan is ready! Want me to open the visual planner? You'll get an interactive timeline, map, weather forecasts, and budget breakdown.\n\n[CTA:POST_PLAN]"
       const ctaId = crypto.randomUUID()
-      useChatStore.getState().messages.push({ id: ctaId, role: 'assistant', content: '', timestamp: new Date() })
-      useChatStore.setState({ messages: [...useChatStore.getState().messages] })
+      useChatStore.setState((s) => ({
+        messages: [...s.messages, { id: ctaId, role: 'assistant' as const, content: '', timestamp: new Date().toISOString() }],
+      }))
       const ctaWords = ctaText.split(' ')
       let ctaAccumulated = ''
       for (const word of ctaWords) {
@@ -845,27 +847,21 @@ export default function ChatInterface() {
         await new Promise(r => setTimeout(r, 25))
       }
     } catch {
-      updateMessage(assistantId, 'Something went wrong. Please try again.')
+      updateMessage(assistantId, { content: 'Something went wrong. Please try again.' })
     } finally {
       setStreamingId(null)
       setLoading(false)
     }
-  }, [sessionId, sliders, addPlaceholder, updateMessage, setSessionId, setLoading])
+  }, [sliders, addPlaceholder, updateMessage, setSessionId, setLoading])
 
   // Stream to /chat/stream
   const handleStream = useCallback(async (trimmed: string) => {
     const assistantId = addPlaceholder()
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed, mode: 'plan', session_id: sessionId, sliders }),
-      })
+      const stream = await apiStream('/chat/stream', { message: trimmed, mode: 'plan', session_id: sessionId, sliders })
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-      const reader = res.body?.getReader()
+      const reader = stream.getReader()
       if (!reader) throw new Error('No reader')
 
       const decoder = new TextDecoder()
@@ -885,7 +881,7 @@ export default function ChatInterface() {
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             accumulated += line.slice(6)
-            updateMessage(assistantId, accumulated)
+            updateMessage(assistantId, { content: accumulated })
           }
         }
       }
@@ -893,14 +889,14 @@ export default function ChatInterface() {
       // Process any remaining buffer
       if (buffer.startsWith('data: ')) {
         accumulated += buffer.slice(6)
-        updateMessage(assistantId, accumulated)
+        updateMessage(assistantId, { content: accumulated })
       }
 
       if (!accumulated) {
-        updateMessage(assistantId, 'No response received. Please try again.')
+        updateMessage(assistantId, { content: 'No response received. Please try again.' })
       }
     } catch {
-      updateMessage(assistantId, 'Something went wrong. Please try again.')
+      updateMessage(assistantId, { content: 'Something went wrong. Please try again.' })
     } finally {
       setStreamingId(null)
       setLoading(false)
@@ -919,9 +915,9 @@ export default function ChatInterface() {
 
     if (zeroShotActive) {
       setZeroShotActive(false)
-      handleZeroShot(trimmed)
+      await handleZeroShot(trimmed)
     } else {
-      handleStream(trimmed)
+      await handleStream(trimmed)
     }
   }, [input, isLoading, zeroShotActive, addMessage, setLoading, setZeroShotActive, handleZeroShot, handleStream])
 
@@ -954,7 +950,7 @@ export default function ChatInterface() {
   }
 
   return (
-    <div style={{ height: 'calc(100vh - 56px)', display: 'flex', flexDirection: 'column', position: 'relative', background: '#080808', overflow: 'hidden' }}>
+    <div style={{ height: 'calc(100vh - 56px)', display: 'flex', flexDirection: 'column', position: 'relative', background: '#0c0f16', overflow: 'hidden' }}>
       {/* Background glow */}
       <div
         style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0, background: CHAT_COLOR.glow }}
@@ -966,20 +962,17 @@ export default function ChatInterface() {
           {messages.length === 0 ? (
             <EmptyState onCardClick={handleCardClick} />
           ) : (
-            <div
-              className="[&::-webkit-scrollbar]:hidden"
+            <ScrollArea
+              ref={scrollAreaRef}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '16px',
-                overflowY: 'auto',
                 padding: '24px 24px 160px',
                 maxWidth: '720px',
                 margin: '0 auto',
                 width: '100%',
                 flex: 1,
-                scrollbarWidth: 'none',
-                msOverflowStyle: 'none',
               }}
             >
               {messages.map((msg) => (
@@ -992,8 +985,7 @@ export default function ChatInterface() {
                   timestamp={msg.timestamp}
                 />
               ))}
-              <div ref={bottomRef} />
-            </div>
+            </ScrollArea>
           )}
 
           {/* Input bar — always visible at bottom */}
