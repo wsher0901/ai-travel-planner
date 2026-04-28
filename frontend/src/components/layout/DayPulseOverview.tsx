@@ -12,7 +12,7 @@ import { type PlanItem, useTripStore } from '@/store/tripStore';
 import { getActivityColor } from '@/lib/activityColors';
 import SkyStrip from '@/components/sky/SkyStrip';
 import { type WeatherSegment } from '@/components/sky/types';
-import { getSunTimes, minToPercent } from '@/lib/sunPosition';
+import { getSunTimes, minToPercent, getIsToday } from '@/lib/sunPosition';
 import { useUIStore } from '@/store/uiStore';
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
@@ -36,6 +36,18 @@ interface Props {
 const DAY_MINUTES = 1440;
 const EMPTY_WEATHER_SEGMENTS: WeatherSegment[] = [];
 
+const SKY_LABELS: { hour: number; label: string; major: boolean }[] = [
+  { hour: 0,     label: '12 AM', major: true  },
+  { hour: 3,     label: '3 AM',  major: false },
+  { hour: 6,     label: '6 AM',  major: true  },
+  { hour: 9,     label: '9 AM',  major: false },
+  { hour: 12,    label: 'NOON',  major: true  },
+  { hour: 15,    label: '3 PM',  major: false },
+  { hour: 18,    label: '6 PM',  major: true  },
+  { hour: 21,    label: '9 PM',  major: false },
+  { hour: 23.97, label: '12 AM', major: true  },
+];
+
 function timeToMin(t: string): number {
   if (!t || !t.includes(':')) return 0;
   const [h, m] = t.split(':').map(Number);
@@ -51,7 +63,7 @@ function formatDuration(totalMin: number): string {
 
 export default function DayPulseOverview({ selectedDate, planItems }: Props) {
   const hoverExpandedId = useUIStore((s) => s.hoverExpandedId);
-  const lockedExpandedId = useUIStore((s) => s.lockedExpandedId);
+  const lockedExpandedIds = useUIStore((s) => s.lockedExpandedIds);
   const suppressHoverUntilLeaveId = useUIStore((s) => s.suppressHoverUntilLeaveId);
   const setHoverExpandedId = useUIStore((s) => s.setHoverExpandedId);
   const dateChangeDirection = useUIStore((s) => s.dateChangeDirection);
@@ -90,6 +102,11 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
   const LNG = tripPlan?.destination_longitude ?? -118.2437;
   const TIMEZONE = tripPlan?.destination_timezone ?? 'America/Los_Angeles';
   const weatherSegments = EMPTY_WEATHER_SEGMENTS;
+
+  const isToday = useMemo(
+    () => (selectedDate ? getIsToday(selectedDate, TIMEZONE) : false),
+    [selectedDate, TIMEZONE]
+  );
 
   const tripStartDate = tripPlan?.start_date;
   const tripEndDate = tripPlan?.end_date;
@@ -135,10 +152,12 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     return buildRailGradient(selectedDate);
   }, [selectedDate, buildRailGradient]);
 
+  const outerRef = useRef<HTMLDivElement>(null);
   const skyViewportRef = useRef<HTMLDivElement>(null);
   const pillsViewportRef = useRef<HTMLDivElement>(null);
   const [skyViewportWidth, setSkyViewportWidth] = useState(0);
   const [pillsViewportWidth, setPillsViewportWidth] = useState(0);
+  const [aspectScale, setAspectScale] = useState(1);
 
   type AnimState =
     | { kind: 'idle'; current: string | null }
@@ -152,8 +171,19 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     if (!selectedDate) return;
 
     const measure = () => {
-      if (skyViewportRef.current) setSkyViewportWidth(skyViewportRef.current.offsetWidth);
-      if (pillsViewportRef.current) setPillsViewportWidth(pillsViewportRef.current.offsetWidth);
+      if (skyViewportRef.current) {
+        const w = skyViewportRef.current.offsetWidth;
+        const h = skyViewportRef.current.offsetHeight;
+        setSkyViewportWidth(prev => prev === w ? prev : w);
+        if (w > 0 && h > 0) {
+          const as = (h / 200) / (w / 1000);
+          setAspectScale(prev => Math.abs(prev - as) > 0.01 ? as : prev);
+        }
+      }
+      if (pillsViewportRef.current) {
+        const w = pillsViewportRef.current.offsetWidth;
+        setPillsViewportWidth(prev => prev === w ? prev : w);
+      }
     };
 
     measure();
@@ -161,8 +191,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     const raf = requestAnimationFrame(measure);
 
     const ro = new ResizeObserver(measure);
-    if (skyViewportRef.current) ro.observe(skyViewportRef.current);
-    if (pillsViewportRef.current) ro.observe(pillsViewportRef.current);
+    if (outerRef.current) ro.observe(outerRef.current);
 
     return () => {
       cancelAnimationFrame(raf);
@@ -179,7 +208,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
       if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
       animTimeoutRef.current = setTimeout(() => {
         setAnimState({ kind: 'idle', current: selectedDate });
-      }, 440);
+      }, 460);
     } else {
       setAnimState({ kind: 'idle', current: selectedDate });
     }
@@ -260,7 +289,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
           const isTiny = durMin < 30;
           const itemIdStr = item.id ? String(item.id) : '';
           const isActive = itemIdStr !== ''
-            && (itemIdStr === hoverExpandedId || itemIdStr === lockedExpandedId)
+            && (itemIdStr === hoverExpandedId || lockedExpandedIds.has(itemIdStr))
             && itemIdStr !== suppressHoverUntilLeaveId;
           const isNew = itemIdStr !== '' && recentlyAddedIds.has(itemIdStr);
           const priority = item.priority ?? 'flexible';
@@ -287,18 +316,13 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
           const onPillClick = () => {
             if (!itemIdStr) return;
             const store = useUIStore.getState();
-            if (store.lockedExpandedId === itemIdStr) {
-              useUIStore.setState({
-                lockedExpandedId: null,
-                hoverExpandedId: null,
-                suppressHoverUntilLeaveId: itemIdStr,
-              });
+            if (store.lockedExpandedIds.has(itemIdStr)) {
+              store.toggleLockedExpanded(itemIdStr);
+              useUIStore.setState({ hoverExpandedId: null, suppressHoverUntilLeaveId: itemIdStr });
             } else {
               store.itineraryScrollHandle?.scrollToElement(itemIdStr);
-              useUIStore.setState({
-                lockedExpandedId: itemIdStr,
-                hoverExpandedId: null,
-              });
+              store.toggleLockedExpanded(itemIdStr);
+              useUIStore.setState({ hoverExpandedId: null });
             }
           };
 
@@ -450,7 +474,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
         })}
       </>
     );
-  }, [pillsByDay, hoverExpandedId, lockedExpandedId, suppressHoverUntilLeaveId, recentlyAddedIds, setHoverExpandedId, schedulePeek, cancelPeek]);
+  }, [pillsByDay, hoverExpandedId, lockedExpandedIds, suppressHoverUntilLeaveId, recentlyAddedIds, setHoverExpandedId, schedulePeek, cancelPeek]);
 
   if (!selectedDate) {
     return (
@@ -470,6 +494,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
 
   return (
     <div
+      ref={outerRef}
       style={{
         width: '100%', height: '100%',
         background: 'rgba(6,182,212,0.03)',
@@ -495,7 +520,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
           ref={skyViewportRef}
           style={{
             position: 'relative',
-            flex: '0 0 60%',
+            flex: '0 0 65%',
             minHeight: 0,
             width: '100%',
             borderRadius: 12,
@@ -513,7 +538,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 key={trackKey}
                 initial={initial}
                 animate={animate}
-                transition={{ duration: 0.38, ease: [0.3, 0, 0.2, 1], delay: 0.016 }}
+                transition={{ duration: 0.44, ease: [0.4, 0, 0.2, 1] }}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -533,6 +558,8 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                       timezone={TIMEZONE}
                       scenery="mountainscape"
                       weatherSegments={weatherSegments}
+                      isToday={isToday && slot0 === selectedDate}
+                      aspectScale={aspectScale}
                     />
                   )}
                 </div>
@@ -545,6 +572,8 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                       timezone={TIMEZONE}
                       scenery="mountainscape"
                       weatherSegments={weatherSegments}
+                      isToday={isToday && slot1 === selectedDate}
+                      aspectScale={aspectScale}
                     />
                   )}
                 </div>
@@ -553,28 +582,39 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
           })()}
         </div>
 
-        {/* Hour labels — STATIC */}
+        {/* Decorative hour labels — absolute row overlapping the sky strip bottom edge */}
         <div style={{
-          flex: '0 0 5%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: 13,
-          fontWeight: 500,
-          color: 'rgba(255,255,255,0.65)',
-          fontFamily: 'monospace',
-          letterSpacing: '0.04em',
-          width: '100%',
+          position: 'absolute',
+          top: 'calc(65% - 13px)',
+          left: 0,
+          right: 0,
+          height: 13,
+          zIndex: 2,
+          pointerEvents: 'none',
+          userSelect: 'none',
         }}>
-          <span>12 AM</span>
-          <span>3 AM</span>
-          <span>6 AM</span>
-          <span>9 AM</span>
-          <span>12 PM</span>
-          <span>3 PM</span>
-          <span>6 PM</span>
-          <span>9 PM</span>
-          <span>12 AM</span>
+          {SKY_LABELS.map(({ hour, label, major }) => {
+            const pct = (hour / 24) * 100;
+            return (
+              <div
+                key={hour}
+                style={{
+                  position: 'absolute',
+                  left: `${pct}%`,
+                  bottom: 0,
+                  transform: hour === 0 ? 'none' : pct >= 99 ? 'translateX(-100%)' : 'translateX(-50%)',
+                  fontSize: 9,
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.03em',
+                  color: major ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.28)',
+                  lineHeight: 1,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {label}
+              </div>
+            );
+          })}
         </div>
 
         {/* Activity track — STATIC container with two-slot pills inside */}
@@ -669,7 +709,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 key={trackKey}
                 initial={initial}
                 animate={animate}
-                transition={{ duration: 0.38, ease: [0.3, 0, 0.2, 1], delay: 0.016 }}
+                transition={{ duration: 0.44, ease: [0.4, 0, 0.2, 1] }}
                 style={{
                   position: 'absolute',
                   top: 0,

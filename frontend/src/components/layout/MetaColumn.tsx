@@ -450,9 +450,8 @@ export default function MetaColumn() {
             padding: 4,
             display: 'flex',
           }}>
-            <div style={{ flex: 1, position: 'relative' }}>
-              <div style={{ position: 'absolute', inset: 0 }}>
-              <ResponsiveContainer width="100%" height="100%">
+            <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+              <ResponsiveContainer width="100%" height={170}>
                 <RadarChart
                   cx="50%"
                   cy="50%"
@@ -481,7 +480,6 @@ export default function MetaColumn() {
                   />
                 </RadarChart>
               </ResponsiveContainer>
-              </div>
             </div>
           </div>
 

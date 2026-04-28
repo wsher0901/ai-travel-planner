@@ -166,6 +166,34 @@
   0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
   50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
 }
+/* Registers --star-opacity as an animatable number so calc() works in @keyframes.
+   Browsers that don't support @property fall back to twinkling 0.6→1 uniformly. */
+@property --star-opacity {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+@keyframes skyStarTwinkle {
+  0%, 100% { opacity: calc(var(--star-opacity, 1) * 0.6); }
+  50% { opacity: var(--star-opacity, 1); }
+}
+@keyframes skyOrbitSpin {
+  to { transform: rotate(360deg); }
+}
+.sky-orbit-ring {
+  animation: skyOrbitSpin 60s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes sunAmbiPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14); }
+}
+.sun-ambi-pulse {
+  animation: sunAmbiPulse 4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
 
 /* Dark cyan scrollbars matching Jarvis palette */
 html ::-webkit-scrollbar,

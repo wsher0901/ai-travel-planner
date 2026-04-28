@@ -1,3 +1,7 @@
+import type { SeasonalPalette } from '@/lib/sunPosition';
+
+export type { SeasonalPalette };
+
 export type WeatherCondition =
   | 'sunny' | 'cloudy' | 'rain-light' | 'rain-heavy'
   | 'snow' | 'thunderstorm' | 'fog';
@@ -17,4 +21,7 @@ export interface SkyStripProps {
   timezone?: string;
   scenery?: SceneryPreset;
   weatherSegments?: WeatherSegment[];
+  palette?: SeasonalPalette;
+  isToday?: boolean;
+  aspectScale?: number;
 }

@@ -8,7 +8,7 @@ interface UIState {
   selectedDate: string | null
   dateChangeDirection: 1 | -1 | 0
   hoverExpandedId: string | null
-  lockedExpandedId: string | null
+  lockedExpandedIds: Set<string>
   suppressHoverUntilLeaveId: string | null
   itineraryScrollHandle: ScrollAreaHandle | null
   focusMode: boolean
@@ -19,7 +19,8 @@ interface UIState {
   /** selectedDate MUST be in YYYY-MM-DD ISO format (e.g. "2025-06-01"). */
   setSelectedDate: (date: string | null) => void
   setHoverExpandedId: (id: string | null) => void
-  setLockedExpandedId: (id: string | null) => void
+  toggleLockedExpanded: (id: string) => void
+  clearLockedExpanded: (id: string) => void
   setSuppressHoverUntilLeaveId: (id: string | null) => void
   setItineraryScrollHandle: (handle: ScrollAreaHandle | null) => void
   setFocusMode: (focus: boolean) => void
@@ -35,7 +36,7 @@ export const useUIStore = create<UIState>((set) => ({
   selectedDate: null,
   dateChangeDirection: 0,
   hoverExpandedId: null,
-  lockedExpandedId: null,
+  lockedExpandedIds: new Set<string>(),
   suppressHoverUntilLeaveId: null,
   itineraryScrollHandle: null,
   focusMode: false,
@@ -52,7 +53,17 @@ export const useUIStore = create<UIState>((set) => ({
     return { selectedDate, dateChangeDirection }
   }),
   setHoverExpandedId: (hoverExpandedId) => set({ hoverExpandedId }),
-  setLockedExpandedId: (lockedExpandedId) => set({ lockedExpandedId }),
+  toggleLockedExpanded: (id) => set((s) => {
+    const next = new Set(s.lockedExpandedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return { lockedExpandedIds: next };
+  }),
+  clearLockedExpanded: (id) => set((s) => {
+    if (!s.lockedExpandedIds.has(id)) return s;
+    const next = new Set(s.lockedExpandedIds);
+    next.delete(id);
+    return { lockedExpandedIds: next };
+  }),
   setSuppressHoverUntilLeaveId: (suppressHoverUntilLeaveId) => set({ suppressHoverUntilLeaveId }),
   setItineraryScrollHandle: (itineraryScrollHandle) => set({ itineraryScrollHandle }),
   setFocusMode: (focusMode) => set({ focusMode }),

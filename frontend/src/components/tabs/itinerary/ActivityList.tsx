@@ -75,9 +75,8 @@ const PRIORITY_STYLES = {
 export default function ActivityList({ dayItems, tripPlan }: Props) {
   const [localHoveredId, setLocalHoveredId] = useState<string | null>(null);
   const hoverExpandedId = useUIStore((s) => s.hoverExpandedId);
-  const lockedExpandedId = useUIStore((s) => s.lockedExpandedId);
+  const lockedExpandedIds = useUIStore((s) => s.lockedExpandedIds);
   const suppressHoverUntilLeaveId = useUIStore((s) => s.suppressHoverUntilLeaveId);
-  const setLockedExpandedId = useUIStore((s) => s.setLockedExpandedId);
   const recentlyAddedIds = useTripStore((s) => s.recentlyAddedIds);
 
   const sorted = useMemo(() => {
@@ -117,7 +116,7 @@ export default function ActivityList({ dayItems, tripPlan }: Props) {
         const location = item.location_name ?? item.address;
         const rowId = String(item.id);
         const isHoverExpanded = rowId === hoverExpandedId;
-        const isLocked = rowId === lockedExpandedId;
+        const isLocked = lockedExpandedIds.has(rowId);
         const isSuppressed = rowId === suppressHoverUntilLeaveId;
         const isExpanded = (isHoverExpanded || isLocked) && !isSuppressed;
         const isCardHovered = rowId === localHoveredId;
@@ -362,19 +361,17 @@ export default function ActivityList({ dayItems, tripPlan }: Props) {
             }
             onClick={() => {
               if (!rowId) return;
-              const handle = useUIStore.getState().itineraryScrollHandle;
-              if (isExpanded) {
-                useUIStore.setState((s) => {
-                  const patch: Partial<typeof s> = {};
-                  if (s.lockedExpandedId === rowId) patch.lockedExpandedId = null;
-                  if (s.hoverExpandedId === rowId) patch.hoverExpandedId = null;
-                  return patch;
-                });
-              } else {
-                if (handle && !handle.isElementVisible(rowId)) {
-                  handle.scrollToElement(rowId);
+              const store = useUIStore.getState();
+              if (store.lockedExpandedIds.has(rowId)) {
+                store.toggleLockedExpanded(rowId);
+                if (store.hoverExpandedId === rowId) {
+                  useUIStore.setState({ hoverExpandedId: null });
                 }
-                setLockedExpandedId(rowId);
+              } else {
+                if (store.itineraryScrollHandle && !store.itineraryScrollHandle.isElementVisible(rowId)) {
+                  store.itineraryScrollHandle.scrollToElement(rowId);
+                }
+                store.toggleLockedExpanded(rowId);
               }
             }}
             onMouseEnter={() => { if (rowId) setLocalHoveredId(rowId); }}
