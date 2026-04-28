@@ -11,6 +11,7 @@ import {
 import { type PlanItem, useTripStore } from '@/store/tripStore';
 import { getActivityColor } from '@/lib/activityColors';
 import SkyStrip from '@/components/sky/SkyStrip';
+import { TimeLabelsStrip } from '@/components/sky/TimeLabelsStrip';
 import { type WeatherSegment } from '@/components/sky/types';
 import { getSunTimes, minToPercent, getIsToday } from '@/lib/sunPosition';
 import { useUIStore } from '@/store/uiStore';
@@ -34,19 +35,35 @@ interface Props {
 }
 
 const DAY_MINUTES = 1440;
-const EMPTY_WEATHER_SEGMENTS: WeatherSegment[] = [];
 
-const SKY_LABELS: { hour: number; label: string; major: boolean }[] = [
-  { hour: 0,     label: '12 AM', major: true  },
-  { hour: 3,     label: '3 AM',  major: false },
-  { hour: 6,     label: '6 AM',  major: true  },
-  { hour: 9,     label: '9 AM',  major: false },
-  { hour: 12,    label: 'NOON',  major: true  },
-  { hour: 15,    label: '3 PM',  major: false },
-  { hour: 18,    label: '6 PM',  major: true  },
-  { hour: 21,    label: '9 PM',  major: false },
-  { hour: 23.97, label: '12 AM', major: true  },
+// Stubbed multi-day weather patterns — cycled by trip-day index until the real
+// Open-Meteo wiring lands. Each pattern is an array of WeatherSegments covering
+// 0-24h. Codes follow Open-Meteo WMO convention.
+const STUB_WEATHER_PATTERNS: WeatherSegment[][] = [
+  // Pattern 0 — Sunny all day
+  [{ startHour: 0, endHour: 24, wmoCode: 1, tempC: 22, precipMm: 0, cloudCover: 10 }],
+  // Pattern 1 — Clear morning, partly cloudy afternoon, overcast evening
+  [
+    { startHour: 0,  endHour: 12, wmoCode: 1, tempC: 18, precipMm: 0, cloudCover: 15 },
+    { startHour: 12, endHour: 18, wmoCode: 2, tempC: 22, precipMm: 0, cloudCover: 45 },
+    { startHour: 18, endHour: 24, wmoCode: 3, tempC: 19, precipMm: 0, cloudCover: 70 },
+  ],
+  // Pattern 2 — Rainy afternoon
+  [
+    { startHour: 0,  endHour: 10, wmoCode: 3,  tempC: 14, precipMm: 0, cloudCover: 80 },
+    { startHour: 10, endHour: 16, wmoCode: 63, tempC: 13, precipMm: 4, cloudCover: 95 },
+    { startHour: 16, endHour: 20, wmoCode: 61, tempC: 14, precipMm: 1, cloudCover: 85 },
+    { startHour: 20, endHour: 24, wmoCode: 3,  tempC: 12, precipMm: 0, cloudCover: 75 },
+  ],
+  // Pattern 3 — Stormy evening
+  [
+    { startHour: 0,  endHour: 14, wmoCode: 2,  tempC: 24, precipMm: 0, cloudCover: 35 },
+    { startHour: 14, endHour: 18, wmoCode: 3,  tempC: 23, precipMm: 0, cloudCover: 75 },
+    { startHour: 18, endHour: 22, wmoCode: 95, tempC: 21, precipMm: 8, cloudCover: 95 },
+    { startHour: 22, endHour: 24, wmoCode: 61, tempC: 18, precipMm: 1, cloudCover: 80 },
+  ],
 ];
+
 
 function timeToMin(t: string): number {
   if (!t || !t.includes(':')) return 0;
@@ -101,7 +118,22 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
   const LAT = tripPlan?.destination_latitude ?? 34.0522;
   const LNG = tripPlan?.destination_longitude ?? -118.2437;
   const TIMEZONE = tripPlan?.destination_timezone ?? 'America/Los_Angeles';
-  const weatherSegments = EMPTY_WEATHER_SEGMENTS;
+
+  // Per-slot lookup so the outgoing day keeps its own weather during the slide
+  // animation (otherwise both slots would show the incoming day's pattern).
+  // Returns one of STUB_WEATHER_PATTERNS' module-scope arrays, so the reference
+  // is stable across calls with the same date — preserves WeatherLayers memos.
+  const tripStartDateForWeather = tripPlan?.start_date;
+  const getWeatherForDate = useCallback((date: string | null): WeatherSegment[] => {
+    if (!date || !tripStartDateForWeather) return STUB_WEATHER_PATTERNS[0];
+    const start = new Date(tripStartDateForWeather + 'T00:00:00');
+    const current = new Date(date + 'T00:00:00');
+    const dayIndex = Math.max(
+      0,
+      Math.round((current.getTime() - start.getTime()) / 86_400_000),
+    );
+    return STUB_WEATHER_PATTERNS[dayIndex % STUB_WEATHER_PATTERNS.length];
+  }, [tripStartDateForWeather]);
 
   const isToday = useMemo(
     () => (selectedDate ? getIsToday(selectedDate, TIMEZONE) : false),
@@ -147,16 +179,9 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     return `linear-gradient(90deg, ${stops.join(', ')})`;
   }, [LAT, LNG, TIMEZONE]);
 
-  const railGradient = useMemo(() => {
-    if (!selectedDate) return 'transparent';
-    return buildRailGradient(selectedDate);
-  }, [selectedDate, buildRailGradient]);
-
   const outerRef = useRef<HTMLDivElement>(null);
   const skyViewportRef = useRef<HTMLDivElement>(null);
-  const pillsViewportRef = useRef<HTMLDivElement>(null);
   const [skyViewportWidth, setSkyViewportWidth] = useState(0);
-  const [pillsViewportWidth, setPillsViewportWidth] = useState(0);
   const [aspectScale, setAspectScale] = useState(1);
 
   type AnimState =
@@ -179,10 +204,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
           const as = (h / 200) / (w / 1000);
           setAspectScale(prev => Math.abs(prev - as) > 0.01 ? as : prev);
         }
-      }
-      if (pillsViewportRef.current) {
-        const w = pillsViewportRef.current.offsetWidth;
-        setPillsViewportWidth(prev => prev === w ? prev : w);
       }
     };
 
@@ -500,249 +521,177 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
         background: 'rgba(6,182,212,0.03)',
         border: '1px solid rgba(6,182,212,0.2)',
         borderRadius: 16,
-        padding: 12,
-        display: 'flex', flexDirection: 'column', gap: 8,
         overflow: 'hidden',
         position: 'relative',
       }}>
-      {/* Bar */}
+      {/* Measurement probes — invisible, preserve ref-based dimension tracking */}
+      <div
+        ref={skyViewportRef}
+        style={{
+          position: 'absolute', top: 0, left: 0,
+          width: '100%', height: '60%',
+          pointerEvents: 'none', visibility: 'hidden',
+        }}
+      />
+      {/* Combined viewport — single overflow container, all 4 layers slide as one unit */}
       <div style={{
         position: 'relative',
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
         width: '100%',
+        height: '100%',
+        overflow: 'hidden',
       }}>
-        {/* Sky two-slot viewport */}
-        <div
-          ref={skyViewportRef}
-          style={{
-            position: 'relative',
-            flex: '0 0 65%',
-            minHeight: 0,
-            width: '100%',
-            borderRadius: 12,
-            overflow: 'hidden',
-          }}
-        >
-          {(() => {
-            const [slot0, slot1] = getSlotOrder(animState);
-            const { initial, animate } = getTrackAnim(animState, skyViewportWidth);
-            const trackKey = animState.kind === 'animating'
-              ? `sky-${animState.outgoing}->${animState.incoming}-${animState.direction}`
-              : `sky-${animState.current ?? 'null'}`;
-            return (
-              <motion.div
-                key={trackKey}
-                initial={initial}
-                animate={animate}
-                transition={{ duration: 0.44, ease: [0.63, 0.5, 0.15, 1] }}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  display: 'flex',
-                  height: '100%',
-                  width: skyViewportWidth * 2,
-                  willChange: 'transform',
-                }}
-              >
-                <div style={{ width: skyViewportWidth, height: '100%', flexShrink: 0 }}>
-                  {slot0 && skyViewportWidth > 0 && (
-                    <SkyStrip
-                      date={slot0}
-                      lat={LAT}
-                      lng={LNG}
-                      timezone={TIMEZONE}
-                      scenery="mountainscape"
-                      weatherSegments={weatherSegments}
-                      isToday={isToday && slot0 === selectedDate}
-                      aspectScale={aspectScale}
-                    />
-                  )}
-                </div>
-                <div style={{ width: skyViewportWidth, height: '100%', flexShrink: 0 }}>
-                  {slot1 && skyViewportWidth > 0 && (
-                    <SkyStrip
-                      date={slot1}
-                      lat={LAT}
-                      lng={LNG}
-                      timezone={TIMEZONE}
-                      scenery="mountainscape"
-                      weatherSegments={weatherSegments}
-                      isToday={isToday && slot1 === selectedDate}
-                      aspectScale={aspectScale}
-                    />
-                  )}
-                </div>
-              </motion.div>
-            );
-          })()}
-        </div>
+        {(() => {
+          const [slot0, slot1] = getSlotOrder(animState);
+          const { initial, animate } = getTrackAnim(animState, skyViewportWidth);
+          const trackKey = animState.kind === 'animating'
+            ? `combined-${animState.outgoing}->${animState.incoming}-${animState.direction}`
+            : `combined-${animState.current ?? 'null'}`;
+          const activeDate = animState.kind === 'idle' ? animState.current : animState.incoming;
 
-        {/* Decorative hour labels — absolute row overlapping the sky strip bottom edge */}
-        <div style={{
-          position: 'absolute',
-          top: 'calc(65% - 13px)',
-          left: 0,
-          right: 0,
-          height: 13,
-          zIndex: 2,
-          pointerEvents: 'none',
-          userSelect: 'none',
-        }}>
-          {SKY_LABELS.map(({ hour, label, major }) => {
-            const pct = (hour / 24) * 100;
-            return (
-              <div
-                key={hour}
-                style={{
-                  position: 'absolute',
-                  left: `${pct}%`,
-                  bottom: 0,
-                  transform: hour === 0 ? 'none' : pct >= 99 ? 'translateX(-100%)' : 'translateX(-50%)',
-                  fontSize: 9,
-                  fontFamily: 'monospace',
-                  letterSpacing: '0.03em',
-                  color: major ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.28)',
-                  lineHeight: 1,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {label}
-              </div>
-            );
-          })}
-        </div>
+          const renderSlot = (slotDate: string | null) => {
+            if (!slotDate) return null;
+            const slotRailGradient = buildRailGradient(slotDate);
+            const slotNowPercent = slotDate === selectedDate ? nowPercent : null;
+            const isActive = slotDate === activeDate;
 
-        {/* Activity track — STATIC container with two-slot pills inside */}
-        <div
-          ref={pillsViewportRef}
-          style={{
-            position: 'relative',
-            flex: '0 0 35%',
-            minHeight: 0,
-            width: '100%',
-            background: 'transparent',
-            borderRadius: 10,
-            overflow: 'hidden',
-          }}
-        >
-          {nowPercent !== null && (
-            <>
+            return (
               <div style={{
-                position: 'absolute',
-                top: '50%',
-                left: `${nowPercent}%`,
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(245,158,11,0.35) 0%, transparent 70%)',
-                animation: 'travelerRingPulse 2s ease-in-out infinite',
-                pointerEvents: 'none',
-                zIndex: 5,
-              }} />
-              <div style={{
-                position: 'absolute',
-                top: '50%',
-                left: `${nowPercent}%`,
-                transformOrigin: 'center bottom',
-                animation: 'travelerBob 1.4s ease-in-out infinite',
-                filter: 'drop-shadow(0 0 6px rgba(245,158,11,0.75))',
-                pointerEvents: 'none',
-                zIndex: 6,
+                width: skyViewportWidth,
+                height: '100%',
+                flexShrink: 0,
+                display: 'flex',
+                flexDirection: 'column',
               }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgb(245,158,11)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="5" r="2.5"/>
-                  <path d="M9 22l1-7 2-3 2 3 1 7"/>
-                  <path d="M10 15l-3-3"/>
-                  <path d="M14 15l3-4"/>
-                </svg>
-              </div>
-            </>
-          )}
+                {/* Layer 1 — Sky (60%) */}
+                <div style={{ flex: '60 1 0', minHeight: 0, position: 'relative' }}>
+                  {slotDate && skyViewportWidth > 0 && (
+                    <SkyStrip
+                      date={slotDate}
+                      lat={LAT}
+                      lng={LNG}
+                      timezone={TIMEZONE}
+                      scenery="mountainscape"
+                      weatherSegments={getWeatherForDate(slotDate)}
+                      isToday={isToday && slotDate === selectedDate}
+                      aspectScale={aspectScale}
+                    />
+                  )}
+                </div>
 
-          {/* Rail — STATIC container, gradient crossfades with selectedDate */}
-          <motion.div
-            animate={{ background: railGradient }}
-            transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: 0,
-              right: 0,
-              transform: 'translateY(-50%)',
-              height: 22,
-              background: railGradient,
-              borderRadius: 4,
-              boxShadow: '0 0 32px rgba(6,182,212,0.12), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.3)',
-              pointerEvents: 'none',
-            }}
-          />
+                {/* Layer 2 — Time labels (6%) */}
+                <div style={{ flex: '6 1 0', minHeight: 0, position: 'relative' }}>
+                  <TimeLabelsStrip />
+                </div>
 
-          {/* Tick dots — STATIC */}
-          {[25, 50, 75].map((pct) => (
-            <div key={pct} style={{
-              position: 'absolute',
-              top: 'calc(50% + 10px)',
-              left: `${pct}%`,
-              transform: 'translateX(-50%)',
-              width: 2,
-              height: 2,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.35)',
-              pointerEvents: 'none',
-            }} />
-          ))}
+                {/* Layer 3 — Annotation placeholder (12%) */}
+                <div style={{ flex: '12 1 0', minHeight: 0, position: 'relative' }}>
+                  <div style={{
+                    width: '100%', height: '100%',
+                    borderTop: '0.5px dashed rgba(6, 182, 212, 0.1)',
+                    background: 'rgba(6, 182, 212, 0.02)',
+                  }} />
+                </div>
 
-          {(() => {
-            const [slot0, slot1] = getSlotOrder(animState);
-            const { initial, animate } = getTrackAnim(animState, pillsViewportWidth);
-            const trackKey = animState.kind === 'animating'
-              ? `pills-${animState.outgoing}->${animState.incoming}-${animState.direction}`
-              : `pills-${animState.current ?? 'null'}`;
-            const activeDate = animState.kind === 'idle' ? animState.current : animState.incoming;
-            return (
-              <motion.div
-                key={trackKey}
-                initial={initial}
-                animate={animate}
-                transition={{ duration: 0.44, ease: [0.63, 0.5, 0.15, 1] }}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
+                {/* Layer 4 — Pills (22%) */}
+                <div style={{
+                  flex: '22 1 0',
+                  minHeight: 0,
+                  padding: '8px 0',
                   display: 'flex',
-                  height: '100%',
-                  width: pillsViewportWidth * 2,
-                  willChange: 'transform',
-                }}
-              >
-                <div style={{
-                  width: pillsViewportWidth,
-                  height: '100%',
-                  flexShrink: 0,
+                  alignItems: 'center',
                   position: 'relative',
-                  pointerEvents: slot0 === activeDate ? 'auto' : 'none',
+                  pointerEvents: isActive ? 'auto' : 'none',
                 }}>
-                  {slot0 && pillsViewportWidth > 0 && renderPillsForDay(slot0)}
-                </div>
-                <div style={{
-                  width: pillsViewportWidth,
-                  height: '100%',
-                  flexShrink: 0,
-                  position: 'relative',
-                  pointerEvents: slot1 === activeDate ? 'auto' : 'none',
-                }}>
-                  {slot1 && pillsViewportWidth > 0 && renderPillsForDay(slot1)}
-                </div>
-              </motion.div>
-            );
-          })()}
+                  {slotNowPercent !== null && (
+                    <>
+                      <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: `${slotNowPercent}%`,
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        background: 'radial-gradient(circle, rgba(245,158,11,0.35) 0%, transparent 70%)',
+                        animation: 'travelerRingPulse 2s ease-in-out infinite',
+                        pointerEvents: 'none',
+                        zIndex: 5,
+                      }} />
+                      <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: `${slotNowPercent}%`,
+                        transformOrigin: 'center bottom',
+                        animation: 'travelerBob 1.4s ease-in-out infinite',
+                        filter: 'drop-shadow(0 0 6px rgba(245,158,11,0.75))',
+                        pointerEvents: 'none',
+                        zIndex: 6,
+                      }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgb(245,158,11)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="5" r="2.5"/>
+                          <path d="M9 22l1-7 2-3 2 3 1 7"/>
+                          <path d="M10 15l-3-3"/>
+                          <path d="M14 15l3-4"/>
+                        </svg>
+                      </div>
+                    </>
+                  )}
 
-        </div>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: 0,
+                      right: 0,
+                      transform: 'translateY(-50%)',
+                      height: 22,
+                      background: slotRailGradient,
+                      borderRadius: 4,
+                      boxShadow: '0 0 32px rgba(6,182,212,0.12), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.3)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+
+                  {[25, 50, 75].map((pct) => (
+                    <div key={pct} style={{
+                      position: 'absolute',
+                      top: 'calc(50% + 10px)',
+                      left: `${pct}%`,
+                      transform: 'translateX(-50%)',
+                      width: 2,
+                      height: 2,
+                      borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.35)',
+                      pointerEvents: 'none',
+                    }} />
+                  ))}
+
+                  {slotDate && skyViewportWidth > 0 && renderPillsForDay(slotDate)}
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <motion.div
+              key={trackKey}
+              initial={initial}
+              animate={animate}
+              transition={{ duration: 0.44, ease: [0.63, 0.5, 0.15, 1] }}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                display: 'flex',
+                height: '100%',
+                width: skyViewportWidth * 2,
+                willChange: 'transform',
+              }}
+            >
+              {renderSlot(slot0)}
+              {renderSlot(slot1)}
+            </motion.div>
+          );
+        })()}
       </div>
 
       {typeof document !== 'undefined' && createPortal(
