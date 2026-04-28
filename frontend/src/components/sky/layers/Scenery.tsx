@@ -1,29 +1,110 @@
 'use client';
+import { useId, useMemo } from 'react';
 import { type SceneryPreset } from '../types';
 
-const CLIP_PATHS: Record<SceneryPreset, string> = {
-  mountainscape: 'polygon(0 100%, 3% 75%, 7% 88%, 11% 62%, 16% 82%, 22% 48%, 28% 72%, 34% 55%, 40% 70%, 46% 38%, 52% 58%, 58% 42%, 64% 65%, 70% 32%, 76% 55%, 82% 42%, 88% 68%, 94% 52%, 100% 78%, 100% 100%)',
-  cityscape: 'polygon(0 100%, 4% 70%, 4% 50%, 10% 50%, 10% 65%, 16% 65%, 16% 40%, 22% 40%, 22% 60%, 28% 60%, 28% 30%, 36% 30%, 36% 55%, 44% 55%, 44% 45%, 52% 45%, 52% 60%, 60% 60%, 60% 35%, 68% 35%, 68% 55%, 76% 55%, 76% 50%, 84% 50%, 84% 65%, 92% 65%, 92% 45%, 100% 45%, 100% 100%)',
-  oceanscape: 'polygon(0 100%, 0 85%, 10% 88%, 20% 85%, 30% 88%, 40% 86%, 50% 89%, 60% 86%, 70% 88%, 80% 85%, 90% 88%, 100% 85%, 100% 100%)',
-  forestscape: 'polygon(0 100%, 0 65%, 4% 55%, 8% 70%, 12% 50%, 18% 65%, 24% 45%, 30% 60%, 36% 48%, 42% 62%, 48% 44%, 54% 58%, 60% 46%, 66% 62%, 72% 50%, 78% 65%, 84% 52%, 90% 60%, 96% 55%, 100% 62%, 100% 100%)',
-  plains: 'polygon(0 100%, 0 80%, 8% 82%, 14% 75%, 20% 80%, 28% 78%, 36% 82%, 44% 76%, 52% 80%, 60% 78%, 68% 82%, 76% 76%, 84% 80%, 92% 78%, 100% 82%, 100% 100%)',
-};
+function mulberry32(a: number) {
+  return (): number => {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const CITY_PATH =
+  'M 0 200 L 0 175' +
+  ' L 60 175 L 60 158 L 100 158 L 100 175' +
+  ' L 140 175 L 140 145 L 175 145 L 175 130 L 195 130 L 195 145 L 220 145 L 220 175' +
+  ' L 280 175 L 280 152 L 320 152 L 320 138 L 350 138 L 350 152 L 390 152 L 390 175' +
+  ' L 450 175 L 450 162 L 490 162 L 490 175' +
+  ' L 540 175 L 540 140 L 575 140 L 575 125 L 610 125 L 610 140 L 645 140 L 645 175' +
+  ' L 700 175 L 700 158 L 740 158 L 740 175' +
+  ' L 790 175 L 790 148 L 830 148 L 830 132 L 865 132 L 865 148 L 900 148 L 900 175' +
+  ' L 950 175 L 950 165 L 1000 165 L 1000 200 Z';
 
 interface Props { preset: SceneryPreset; }
 
 export default function Scenery({ preset }: Props) {
+  const uid = useId().replace(/:/g, '');
+  const clipId = `city-${uid}`;
+
+  const windowLights = useMemo(() => {
+    if (preset !== 'cityscape') return [];
+    const rand = mulberry32(0xCA1C1A7E);
+    const pts: [number, number][] = [];
+    for (let i = 0; i < 160; i++) {
+      pts.push([rand() * 1000, rand() * 60 + 130]);
+    }
+    return pts;
+  }, [preset]);
+
   return (
-    <div
+    <svg
       aria-hidden="true"
       style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0, right: 0,
-        height: 50,
+        position: 'absolute', inset: 0,
+        width: '100%', height: '100%',
         zIndex: 8,
-        background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.55) 100%)',
-        clipPath: CLIP_PATHS[preset],
+        pointerEvents: 'none',
       }}
-    />
+      viewBox="0 0 1000 200"
+      preserveAspectRatio="none"
+    >
+      {preset === 'mountainscape' && (
+        <>
+          <path
+            d="M 0 200 L 0 165 Q 80 145 160 158 T 320 152 Q 410 138 500 148 T 700 142 Q 820 155 920 150 L 1000 158 L 1000 200 Z"
+            fill="#1a2030" opacity="0.78"
+          />
+          <path
+            d="M 0 200 L 0 178 Q 100 168 200 174 T 400 170 Q 540 162 680 172 T 900 168 L 1000 175 L 1000 200 Z"
+            fill="#0f1420" opacity="0.6"
+          />
+        </>
+      )}
+
+      {preset === 'cityscape' && (
+        <>
+          <defs>
+            <clipPath id={clipId}>
+              <path d={CITY_PATH} />
+            </clipPath>
+          </defs>
+          <path d={CITY_PATH} fill="#0e1420" opacity="0.85" />
+          <g clipPath={`url(#${clipId})`}>
+            {windowLights.map(([x, y], i) => (
+              <circle key={i} cx={x} cy={y} r={0.6} fill="#FFD56B" opacity="0.5" />
+            ))}
+          </g>
+        </>
+      )}
+
+      {preset === 'oceanscape' && (
+        <>
+          <path
+            d="M 0 200 L 0 188 Q 100 184 200 188 T 400 188 Q 550 184 700 188 T 900 188 L 1000 188 L 1000 200 Z"
+            fill="#0a1828" opacity="0.7"
+          />
+          <path
+            d="M 0 200 L 0 195 Q 150 193 300 195 T 600 195 Q 800 193 1000 195 L 1000 200 Z"
+            fill="#152838" opacity="0.5"
+          />
+        </>
+      )}
+
+      {preset === 'forestscape' && (
+        <path
+          d="M 0 200 L 0 158 Q 20 148 40 154 Q 60 138 80 148 Q 100 132 120 142 Q 145 122 165 135 Q 190 118 210 130 Q 235 120 260 128 Q 285 112 310 124 Q 335 130 355 120 Q 380 110 405 122 Q 430 128 450 118 Q 475 108 500 120 Q 525 128 545 118 Q 570 110 590 120 Q 615 128 635 118 Q 660 110 685 120 Q 710 128 730 118 Q 755 108 780 120 Q 805 130 825 120 Q 850 112 875 122 Q 900 132 920 122 Q 945 115 970 124 L 1000 128 L 1000 200 Z"
+          fill="#0d1a14" opacity="0.82"
+        />
+      )}
+
+      {preset === 'plains' && (
+        <path
+          d="M 0 200 L 0 185 Q 250 182 500 184 T 1000 183 L 1000 200 Z"
+          fill="#1a2030" opacity="0.65"
+        />
+      )}
+    </svg>
   );
 }

@@ -19,7 +19,7 @@ interface Props {
 
 const HALF_PI = Math.PI / 2;
 const ARC_HORIZON_Y = 215;
-const ARC_APEX_Y    = 5;
+const ARC_APEX_Y    = -50;
 
 function interpolatePos(
   samples: { hour: number; altitude: number }[],
@@ -114,16 +114,21 @@ export default function CelestialBodies({
     () => moonMinute !== null ? getMoonPositionAtMinute(date, moonMinute, lat, lng, timezone) : null,
     [moonMinute, date, lat, lng, timezone],
   );
-  const moonX = moonMinute !== null ? (moonMinute / 1440) * 1000 : null;
-  const moonY = moonData && moonData.altitude > 0
-    ? Math.max(15, 100 - (moonData.altitude / HALF_PI) * 80)
-    : null;
-
   // Crescent phase — two-circle occlusion method
-  const moonPhase    = moonData?.phase ?? 0;
-  const phaseAngle   = moonPhase * 2 * Math.PI;
-  const shadowDx     = Math.cos(phaseAngle) * 7;
-  const shadowR      = 7;
+  const moonPhase  = moonData?.phase ?? 0;
+  const isNewMoon  = moonPhase < 0.03 || moonPhase > 0.97;
+  const phaseAngle = moonPhase * 2 * Math.PI;
+  const shadowDx   = Math.cos(phaseAngle) * 7;
+  const shadowR    = 7;
+
+  const moonX = moonMinute !== null ? (moonMinute / 1440) * 1000 : null;
+  // Gate on phase (not altitude) — render on all days except true new moon.
+  // When moon is technically below horizon at render time, park it at y=35 (upper sky).
+  const moonY = (!isNewMoon && moonData !== null)
+    ? moonData.altitude > 0
+      ? Math.max(15, 100 - (moonData.altitude / HALF_PI) * 80)
+      : 35
+    : null;
 
   // Live "now" marker — ref-mutated on 60 s tick to avoid React re-renders
   const liveRef = useRef<SVGGElement>(null);
