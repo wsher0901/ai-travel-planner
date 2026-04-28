@@ -53,7 +53,9 @@
       "mcp__chrome-devtools__performance_start_trace",
       "mcp__chrome-devtools__performance_stop_trace",
       "mcp__chrome-devtools__performance_analyze_insight",
-      "Bash(git -C \"C:/Users/wonse/MyFile/Coding/ai-travel-planner\" diff HEAD -- frontend/src/components/sky/layers/TimeAxis.tsx)"
+      "Bash(git -C \"C:/Users/wonse/MyFile/Coding/ai-travel-planner\" diff HEAD -- frontend/src/components/sky/layers/TimeAxis.tsx)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   },
   "model": "sonnet",

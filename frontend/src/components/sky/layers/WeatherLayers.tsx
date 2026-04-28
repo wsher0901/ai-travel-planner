@@ -1,170 +1,181 @@
 'use client';
 import { useMemo, useId } from 'react';
-import { type WeatherSegment, type WeatherCondition } from '../types';
-import Raindrop from '../assets/Raindrop';
+import { type WeatherSegment, type SeasonalPalette } from '../types';
 
-interface Props { segments: WeatherSegment[]; }
-
-function hourToPercent(h: number): number {
-  return (h / 24) * 100;
+interface WeatherLayersProps {
+  segments: WeatherSegment[];
+  // Reserved for prompt 2c (golden-hour tinting / cloud-through-sun attenuation).
+  // Currently unused; cloud rgba values are hardcoded below.
+  palette: SeasonalPalette;
 }
 
-export default function WeatherLayers({ segments }: Props) {
-  return (
-    <>
-      {segments.map((seg) => {
-        const left = hourToPercent(seg.startHour);
-        const width = hourToPercent(seg.endHour - seg.startHour);
-        return (
-          <SegmentRenderer
-            key={`${seg.startHour}-${seg.endHour}-${seg.condition}`}
-            left={left}
-            width={width}
-            condition={seg.condition}
-            startHour={seg.startHour}
-            endHour={seg.endHour}
-          />
-        );
-      })}
-    </>
-  );
-}
+const VIEWBOX_WIDTH = 1000;
+const VIEWBOX_HEIGHT = 200;
 
-interface SegmentProps {
-  left: number;
-  width: number;
-  condition: WeatherCondition;
-  startHour: number;
-  endHour: number;
-}
+// Storm / heavy-rain WMO codes — render with darker gray-blue cast
+const STORM_CODES = new Set<number>([63, 65, 82, 95, 96, 99]);
 
-function SegmentRenderer({ left, width, condition, startHour, endHour }: SegmentProps) {
-  // Stable unique id per instance — avoids SVG gradient id collisions
-  const uid = useId().replace(/:/g, '-');
-
-  const wrapperStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0, bottom: 20,
-    left: `${left}%`,
-    width: `${width}%`,
-    overflow: 'hidden',
-    zIndex: 7,
-    maskImage: 'linear-gradient(90deg, transparent 0%, black 20%, black 80%, transparent 100%)',
-    WebkitMaskImage: 'linear-gradient(90deg, transparent 0%, black 20%, black 80%, transparent 100%)',
-    pointerEvents: 'none',
+// Mulberry32 PRNG — deterministic; mirrors Stars.tsx pattern
+function mulberry32(seed: number) {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let z = Math.imul(s ^ (s >>> 15), 1 | s);
+    z = (z + Math.imul(z ^ (z >>> 7), 61 | z)) ^ z;
+    return ((z ^ (z >>> 14)) >>> 0) / 4294967296;
   };
+}
 
-  if (condition === 'sunny') return null;
+function findSegmentAt(segments: WeatherSegment[], h: number): WeatherSegment | undefined {
+  if (segments.length === 0) return undefined;
+  for (const seg of segments) {
+    if (h >= seg.startHour && h < seg.endHour) return seg;
+  }
+  // h === 24 boundary: only honor the last segment if it actually reaches 24.
+  // If segments leave a gap (malformed data), treat that hour as clear sky
+  // rather than silently extending the last segment's cloud cover.
+  if (h >= 24) {
+    const last = segments[segments.length - 1];
+    if (last.endHour >= 24) return last;
+  }
+  return undefined;
+}
 
-  if (condition === 'cloudy' || condition === 'fog') {
-    const tintColor = condition === 'fog'
-      ? 'linear-gradient(180deg, rgba(180,185,195,0.45) 0%, rgba(140,148,160,0.35) 100%)'
-      : 'linear-gradient(180deg, rgba(80,85,100,0.35) 0%, rgba(60,65,85,0.2) 100%)';
-    const gradId = `c-upper-${uid}`;
-    return (
-      <div style={wrapperStyle}>
-        <div style={{ position: 'absolute', inset: 0, background: tintColor }} />
-        <svg style={{ position: 'absolute', top: 6, left: 0, width: '100%', height: 52 }} viewBox="0 0 400 52" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#e4eaf0" />
-              <stop offset="100%" stopColor="#8a96a8" />
-            </linearGradient>
-          </defs>
-          <ellipse cx="40" cy="30" rx="34" ry="16" fill={`url(#${gradId})`} opacity="0.9" />
-          <ellipse cx="110" cy="26" rx="42" ry="18" fill={`url(#${gradId})`} opacity="0.92" />
-          <ellipse cx="185" cy="32" rx="40" ry="17" fill={`url(#${gradId})`} opacity="0.88" />
-          <ellipse cx="260" cy="28" rx="44" ry="18" fill={`url(#${gradId})`} opacity="0.92" />
-          <ellipse cx="335" cy="32" rx="40" ry="17" fill={`url(#${gradId})`} opacity="0.88" />
-        </svg>
-      </div>
-    );
+interface GradientStop {
+  offset: string;
+  color: string;
+}
+
+interface CloudPuff {
+  cx: number;
+  cy: number;
+  r: number;
+  rotation: number;
+  ellipses: { cx: number; cy: number; rx: number; ry: number }[];
+}
+
+function buildGradientStops(segments: WeatherSegment[]): GradientStop[] {
+  const stops: GradientStop[] = [];
+  for (let h = 0; h <= 24; h++) {
+    const seg = findSegmentAt(segments, h);
+    const cloudCover = seg?.cloudCover ?? 0;
+    const wmo = seg?.wmoCode ?? 0;
+
+    // Non-linear opacity ramp: 0-30% reads almost clear, 70%+ reads dense
+    const alpha = Math.pow(Math.max(0, Math.min(100, cloudCover)) / 100, 1.4) * 0.6;
+
+    const color = STORM_CODES.has(wmo)
+      ? `rgba(60, 70, 90, ${alpha.toFixed(3)})`
+      : `rgba(190, 200, 215, ${alpha.toFixed(3)})`;
+
+    stops.push({
+      offset: `${((h / 24) * 100).toFixed(3)}%`,
+      color,
+    });
+  }
+  return stops;
+}
+
+function buildCloudPuffs(segments: WeatherSegment[]): CloudPuff[] {
+  const puffs: CloudPuff[] = [];
+
+  for (const seg of segments) {
+    // Cumulus puffs only on partly-cloudy hours (WMO 2)
+    if (seg.wmoCode !== 2) continue;
+
+    const xStart = (seg.startHour / 24) * VIEWBOX_WIDTH;
+    const xEnd = (seg.endHour / 24) * VIEWBOX_WIDTH;
+    const segWidth = xEnd - xStart;
+    if (segWidth < 16) continue;
+
+    // Deterministic per-segment RNG: same startHour ⇒ same puff layout across renders
+    const seed = Math.floor(seg.startHour * 1000) + 1;
+    const rand = mulberry32(seed);
+
+    // 2-4 puffs per partly-cloudy segment
+    const count = 2 + Math.floor(rand() * 3);
+
+    for (let i = 0; i < count; i++) {
+      // Even spacing with light jitter so they don't line up perfectly
+      const t = (i + 0.5) / count + (rand() - 0.5) * (0.5 / count);
+      const tClamped = Math.max(0.06, Math.min(0.94, t));
+      const cx = xStart + tClamped * segWidth;
+      const cy = 25 + rand() * 70;
+      const r = 8 + rand() * 6;
+      const rotation = -5 + rand() * 10;
+
+      // 4 overlapping ellipses → puffy cumulus silhouette
+      // Coordinates are local; the wrapping <g> translates and rotates.
+      const ellipses = [
+        // Wide flat base
+        { cx: 0, cy: r * 0.18, rx: r * 1.05, ry: r * 0.5 },
+        // Left shoulder
+        { cx: -r * 0.5, cy: -r * 0.04, rx: r * 0.6, ry: r * 0.5 },
+        // Right shoulder
+        { cx: r * 0.46, cy: -r * 0.1, rx: r * 0.65, ry: r * 0.55 },
+        // Top peak
+        { cx: -r * 0.05, cy: -r * 0.28, rx: r * 0.55, ry: r * 0.42 },
+      ];
+
+      puffs.push({ cx, cy, r, rotation, ellipses });
+    }
   }
 
-  if (condition === 'rain-light' || condition === 'rain-heavy' || condition === 'thunderstorm') {
-    const isHeavy = condition === 'rain-heavy' || condition === 'thunderstorm';
-    const dropCount = isHeavy ? 30 : 18;
-    const speed = isHeavy ? 0.6 : 0.9;
-    const tint = condition === 'thunderstorm'
-      ? 'linear-gradient(180deg, rgba(25,30,45,0.7) 0%, rgba(20,25,40,0.5) 100%)'
-      : 'linear-gradient(180deg, rgba(40,55,80,0.55) 0%, rgba(30,45,70,0.3) 100%)';
-    const gradId = `r-dark-${uid}`;
+  return puffs;
+}
 
-    // Stable raindrop positions keyed on segment identity
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const drops = useMemo(() => {
-      const arr: { leftPercent: number; delay: number }[] = [];
-      // Use a simple LCG seeded on startHour+endHour+dropCount for deterministic values
-      let seed = (startHour * 1000 + endHour * 37 + dropCount * 7) | 0;
-      const rand = () => {
-        seed = (seed * 1664525 + 1013904223) & 0x7fffffff;
-        return seed / 0x7fffffff;
-      };
-      for (let i = 0; i < dropCount; i++) {
-        arr.push({ leftPercent: (i / dropCount) * 100 + rand() * 3, delay: rand() * 0.8 });
-      }
-      return arr;
-    }, [startHour, endHour, dropCount]);
+export default function WeatherLayers({ segments }: WeatherLayersProps) {
+  const uid = useId().replace(/:/g, '-');
+  const gradientId = `cloud-gradient-${uid}`;
+  const blurId = `cloud-blur-${uid}`;
 
-    return (
-      <div style={wrapperStyle}>
-        <div style={{ position: 'absolute', inset: 0, background: tint }} />
-        <svg style={{ position: 'absolute', top: 4, left: 0, width: '100%', height: 44 }} viewBox="0 0 400 44" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#8695a8" />
-              <stop offset="100%" stopColor="#3a4656" />
-            </linearGradient>
-          </defs>
-          <ellipse cx="50" cy="26" rx="42" ry="18" fill={`url(#${gradId})`} />
-          <ellipse cx="130" cy="22" rx="48" ry="20" fill={`url(#${gradId})`} />
-          <ellipse cx="215" cy="26" rx="46" ry="19" fill={`url(#${gradId})`} />
-          <ellipse cx="300" cy="22" rx="50" ry="20" fill={`url(#${gradId})`} />
-          <ellipse cx="375" cy="26" rx="40" ry="18" fill={`url(#${gradId})`} />
-        </svg>
-        {drops.map((d, i) => (
-          <Raindrop key={i} leftPercent={d.leftPercent} delay={d.delay} speed={speed} />
+  const gradientStops = useMemo(() => buildGradientStops(segments), [segments]);
+  const puffs = useMemo(() => buildCloudPuffs(segments), [segments]);
+
+  if (segments.length === 0) return null;
+
+  return (
+    <g aria-hidden="true">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
+          {gradientStops.map((s, i) => (
+            <stop key={i} offset={s.offset} stopColor={s.color} />
+          ))}
+        </linearGradient>
+        <filter id={blurId} x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur stdDeviation="0.8" />
+        </filter>
+      </defs>
+
+      {/* Layer A — continuous cloud wash spanning the full sky strip */}
+      <rect
+        x="0"
+        y="0"
+        width={VIEWBOX_WIDTH}
+        height={VIEWBOX_HEIGHT}
+        fill={`url(#${gradientId})`}
+      />
+
+      {/* Layer B — cumulus puffs over partly-cloudy segments */}
+      <g filter={`url(#${blurId})`}>
+        {puffs.map((p, i) => (
+          <g
+            key={i}
+            transform={`translate(${p.cx.toFixed(2)},${p.cy.toFixed(2)}) rotate(${p.rotation.toFixed(2)})`}
+          >
+            {p.ellipses.map((e, j) => (
+              <ellipse
+                key={j}
+                cx={e.cx.toFixed(2)}
+                cy={e.cy.toFixed(2)}
+                rx={e.rx.toFixed(2)}
+                ry={e.ry.toFixed(2)}
+                fill="rgba(245, 250, 255, 0.42)"
+              />
+            ))}
+          </g>
         ))}
-      </div>
-    );
-  }
-
-  if (condition === 'snow') {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const flakes = useMemo(() => {
-      const count = 22;
-      let seed = (startHour * 999 + endHour * 43 + count * 11) | 0;
-      const rand = () => {
-        seed = (seed * 1664525 + 1013904223) & 0x7fffffff;
-        return seed / 0x7fffffff;
-      };
-      return Array.from({ length: count }, (_, i) => ({
-        left: (i / count) * 100 + rand() * 3,
-        duration: 2.5 + rand() * 1.5,
-        animDelay: rand() * 3,
-      }));
-    }, [startHour, endHour]);
-
-    return (
-      <div style={wrapperStyle}>
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(150,160,175,0.4) 0%, rgba(120,130,150,0.25) 100%)' }} />
-        {flakes.map((f, i) => (
-          <div key={i} style={{
-            position: 'absolute',
-            left: `${f.left}%`,
-            top: 0,
-            width: 3, height: 3,
-            background: '#fff',
-            borderRadius: '50%',
-            boxShadow: '0 0 3px #fff',
-            animation: `skyFall ${f.duration}s linear infinite`,
-            animationDelay: `${f.animDelay}s`,
-            willChange: 'transform',
-          }} />
-        ))}
-      </div>
-    );
-  }
-
-  return null;
+      </g>
+    </g>
+  );
 }
