@@ -18,8 +18,8 @@ const eventSlideVariants = {
 }
 
 const eventSlideTransition = {
-  x:       { duration: 0.52, ease: [0.4, 0, 0.2, 1] as const },
-  opacity: { duration: 0.26, ease: 'easeOut' as const },
+  x:       { duration: 0.44, ease: [0.4, 0, 0.2, 1] as const },
+  opacity: { duration: 0.22, ease: 'easeOut' as const },
 }
 
 const RADAR_DATA = [

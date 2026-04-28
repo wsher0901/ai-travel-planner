@@ -2,7 +2,7 @@ import asyncio
 import logging
 import re
 import traceback
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -255,6 +255,28 @@ async def generate_plan(
             except ValueError:
                 pass
 
+        # Year-correction guard: if AI returned a past start_date, advance to the
+        # next future occurrence of the same month+day (preserving trip duration).
+        if start_str:
+            try:
+                ai_start_dt = datetime.strptime(start_str, "%Y-%m-%d").date()
+                today_d = date.today()
+                if ai_start_dt < today_d:
+                    years_to_add = today_d.year - ai_start_dt.year
+                    candidate = ai_start_dt.replace(year=ai_start_dt.year + years_to_add)
+                    if candidate < today_d:
+                        years_to_add += 1
+                    corrected_start = ai_start_dt.replace(year=ai_start_dt.year + years_to_add)
+                    logger.warning(
+                        f"Year correction | AI returned past start_date {start_str} "
+                        f"→ {corrected_start.isoformat()} (+{years_to_add} year(s))"
+                    )
+                    plan["start_date"] = corrected_start.isoformat()
+                    start_str = plan["start_date"]
+                    # ai_days (duration) is unchanged; end_date recomputed below
+            except (ValueError, OverflowError):
+                pass
+
         # Decide authoritative day count
         authoritative_days = None
         source = None
@@ -304,6 +326,18 @@ async def generate_plan(
                         plan["items"] = filtered_items
             except ValueError as e:
                 logger.error(f"Failed to reconcile dates: {e}")
+
+        # Re-derive item dates from authoritative start_date so they always match
+        # the corrected trip-level dates rather than what the AI returned.
+        if plan.get("start_date") and items_raw:
+            try:
+                base_dt = datetime.strptime(plan["start_date"], "%Y-%m-%d")
+                for it in items_raw:
+                    day_num = it.get("day_number")
+                    if day_num is not None:
+                        it["date"] = (base_dt + timedelta(days=int(day_num) - 1)).strftime("%Y-%m-%d")
+            except (ValueError, TypeError) as e:
+                logger.error(f"Failed to re-derive item dates: {e}")
 
         # Normalize activity_type on every item
         normalized_items = plan.get("plan_items", plan.get("items", []))

@@ -538,7 +538,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 key={trackKey}
                 initial={initial}
                 animate={animate}
-                transition={{ duration: 0.44, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.44, ease: [0.63, 0.5, 0.15, 1] }}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -709,7 +709,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 key={trackKey}
                 initial={initial}
                 animate={animate}
-                transition={{ duration: 0.44, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.44, ease: [0.63, 0.5, 0.15, 1] }}
                 style={{
                   position: 'absolute',
                   top: 0,

@@ -70,9 +70,18 @@ def build_plan_system_prompt(sliders: dict | None, user_timezone: str | None = N
     else:
         today_str = date.today().isoformat()
 
+    current_year = today_str[:4]
+    next_year = str(int(current_year) + 1)
     date_context = (
-        f"Today's date is {today_str}. Generate plans for future dates only. "
-        f"For vague phrasing like 'a week in June', use the upcoming June.\n\n"
+        f"Today's date is {today_str}. The current year is {current_year}.\n\n"
+        f"YEAR-RESOLUTION RULES (apply strictly):\n"
+        f"1. If the user states a year explicitly (e.g. 'June 2027'), use that year.\n"
+        f"2. If the user states a date without a year (e.g. 'December 15th', 'next March'):\n"
+        f"   - If that date in {current_year} is on or after today ({today_str}), use {current_year}.\n"
+        f"   - If that date in {current_year} has already passed, use {next_year}.\n"
+        f"3. NEVER return a start_date before {today_str}. "
+        f"NEVER use any year before {current_year} unless the user explicitly named it.\n"
+        f"4. For relative phrasing ('next week', 'in 3 weeks'), compute relative to {today_str}.\n\n"
     )
     body = (
         "You are Roam, an expert AI travel planner. Respond with ONLY a valid JSON "

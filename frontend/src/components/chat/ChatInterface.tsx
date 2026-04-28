@@ -767,6 +767,7 @@ export default function ChatInterface() {
         session_id: null,
         user_id: user?.id ?? null,
         sliders,
+        user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       })
 
       const summary = [
