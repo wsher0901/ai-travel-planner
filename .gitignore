@@ -7,4 +7,5 @@ __pycache__/
 venv/
 .DS_Store
 .vercel
-.mcp.json
+.mcp.json"*.trace.json" 
+"sky_swipe_trace.json" 
