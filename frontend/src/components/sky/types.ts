@@ -3,16 +3,26 @@ import type { SeasonalPalette } from '@/lib/sunPosition';
 export type { SeasonalPalette };
 
 export type WeatherCondition =
-  | 'sunny' | 'cloudy' | 'rain-light' | 'rain-heavy'
-  | 'snow' | 'thunderstorm' | 'fog';
+  | 'clear'
+  | 'partly-cloudy'
+  | 'overcast'
+  | 'fog'
+  | 'rain-light'
+  | 'rain-heavy'
+  | 'thunderstorm'
+  | 'snow-light'
+  | 'snow-heavy';
 
 export interface WeatherSegment {
-  startHour: number;
-  endHour: number;
-  condition: WeatherCondition;
+  startHour: number;   // 0-24 fractional
+  endHour: number;     // 0-24 fractional
+  wmoCode: number;     // WMO weather code (Open-Meteo standard)
+  tempC: number;
+  precipMm: number;
+  cloudCover: number;  // 0-100
 }
 
-export type SceneryPreset = 'cityscape' | 'oceanscape' | 'mountainscape' | 'plains';
+export type SceneryPreset = 'cityscape' | 'oceanscape' | 'mountainscape' | 'forestscape' | 'plains';
 
 export interface SkyStripProps {
   date: string;

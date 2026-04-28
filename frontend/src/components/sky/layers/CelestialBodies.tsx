@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useEffect, useRef, useId } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import {
   type SunTimes,
   getHourlySolarElevation,
@@ -76,9 +76,7 @@ function bezierYatX(
 export default function CelestialBodies({
   sunTimes, lat, lng, timezone, date, isToday, aspectScale,
 }: Props) {
-  const as  = aspectScale ?? 1;
-  const uid = useId().replace(/:/g, '-');
-  const sunCoreId = `sc-${uid}`;
+  const as = aspectScale ?? 1;
 
   const hourlyElevations = useMemo(
     () => getHourlySolarElevation(date, lat, lng, timezone),
@@ -159,46 +157,39 @@ export default function CelestialBodies({
 
   return (
     <>
-      <defs>
-        {/* Sun: warm core fading to transparent edge */}
-        <radialGradient id={sunCoreId} cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="#FFF8E0" />
-          <stop offset="60%"  stopColor="#FFD56B" />
-          <stop offset="100%" stopColor="#FFD56B" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      {/* Sun arc — single dotted quadratic Bezier from sunrise to sunset */}
+      {/* Sun arc — dotted quadratic Bezier from sunrise to sunset */}
       {arcPath && (
         <path
           d={arcPath}
           fill="none"
-          stroke="rgba(255, 220, 180, 0.35)"
+          stroke="rgba(180, 210, 240, 0.45)"
           strokeWidth={1.5}
           strokeDasharray="3 4"
           strokeLinecap="round"
         />
       )}
 
-      {/* Solar noon marker */}
+      {/* Solar noon marker — 3-ring illustrative sun */}
       {noonX !== null && noonY !== null && noonAltitude > 0 && (
         <g transform={`translate(${noonX.toFixed(1)} ${noonY.toFixed(1)})`}>
-          <ellipse rx={20 * as} ry={20} fill="rgba(255, 213, 107, 0.22)" />
-          <ellipse rx={11 * as} ry={11} fill={`url(#${sunCoreId})`} />
+          <ellipse rx={28 * as} ry={28} fill="rgba(180, 210, 200, 0.12)" />
+          <ellipse rx={16 * as} ry={16} fill="rgba(220, 200, 100, 0.32)" />
+          <ellipse rx={9 * as}  ry={9}  fill="#F2CA40" />
         </g>
       )}
 
       {/* Live "now" marker — position updated imperatively */}
       <g ref={liveRef} style={{ display: 'none', willChange: 'transform' }}>
-        <ellipse rx={24 * as} ry={24} fill="rgba(255, 213, 107, 0.28)" />
-        <ellipse rx={13 * as} ry={13} fill={`url(#${sunCoreId})`} />
+        <ellipse rx={28 * as} ry={28} fill="rgba(180, 210, 200, 0.12)" />
+        <ellipse rx={16 * as} ry={16} fill="rgba(220, 200, 100, 0.32)" />
+        <ellipse rx={9 * as}  ry={9}  fill="#F2CA40" />
       </g>
 
-      {/* Moon — two-circle crescent */}
+      {/* Moon — two-circle crescent (slate-blue base matches sky) */}
       {moonX !== null && moonY !== null && (
         <g transform={`translate(${moonX.toFixed(1)} ${moonY.toFixed(1)})`}>
-          <ellipse rx={7 * as} ry={7} fill="#F4F0E8" />
-          <ellipse cx={shadowDx} rx={shadowR * as} ry={shadowR} fill="#1A2444" />
+          <ellipse rx={7 * as} ry={7} fill="#6888a8" />
+          <ellipse cx={shadowDx} rx={shadowR * as} ry={shadowR} fill="#0d1928" />
         </g>
       )}
     </>

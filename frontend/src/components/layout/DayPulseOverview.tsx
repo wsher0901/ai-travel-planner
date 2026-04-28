@@ -13,7 +13,9 @@ import { getActivityColor } from '@/lib/activityColors';
 import SkyStrip from '@/components/sky/SkyStrip';
 import { TimeLabelsStrip } from '@/components/sky/TimeLabelsStrip';
 import { type WeatherSegment } from '@/components/sky/types';
-import { getSunTimes, minToPercent, getIsToday } from '@/lib/sunPosition';
+import { getIsToday } from '@/lib/sunPosition';
+import { inferScenery } from '@/lib/inferScenery';
+import type { SceneryPreset } from '@/components/sky/types';
 import { useUIStore } from '@/store/uiStore';
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
@@ -160,24 +162,9 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     return days;
   }, [tripStartDate, tripEndDate]);
 
-  const buildRailGradient = useCallback((date: string) => {
-    const st = getSunTimes(date, LAT, LNG, TIMEZONE);
-    const { astronomicalDawnMin, dawnMin, sunriseMin, solarNoonMin, sunsetMin, duskMin, astronomicalDuskMin } = st;
-    const stops: string[] = [];
-    const add = (pct: number, color: string) => stops.push(`${color} ${Math.max(0, Math.min(100, pct)).toFixed(2)}%`);
-    add(0, 'rgba(4,7,20,0.9)');
-    add(minToPercent(astronomicalDawnMin), 'rgba(14,24,56,0.8)');
-    add(minToPercent(dawnMin), 'rgba(106,58,88,0.75)');
-    add(minToPercent(sunriseMin), 'rgba(236,170,106,0.75)');
-    add(minToPercent(sunriseMin) + 3, 'rgba(142,194,232,0.7)');
-    add(minToPercent(solarNoonMin), 'rgba(114,182,232,0.7)');
-    add(minToPercent(sunsetMin) - 3, 'rgba(164,200,220,0.7)');
-    add(minToPercent(sunsetMin), 'rgba(232,131,62,0.75)');
-    add(minToPercent(duskMin), 'rgba(122,46,72,0.8)');
-    add(minToPercent(astronomicalDuskMin), 'rgba(22,24,56,0.85)');
-    add(100, 'rgba(6,10,28,0.9)');
-    return `linear-gradient(90deg, ${stops.join(', ')})`;
-  }, [LAT, LNG, TIMEZONE]);
+  const rawScenery = useTripStore((s) => s.tripPlan?.destination_scenery);
+  const destination = useTripStore((s) => s.tripPlan?.destination ?? '');
+  const scenery: SceneryPreset = rawScenery ?? inferScenery(destination);
 
   const outerRef = useRef<HTMLDivElement>(null);
   const skyViewportRef = useRef<HTMLDivElement>(null);
@@ -550,7 +537,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
 
           const renderSlot = (slotDate: string | null) => {
             if (!slotDate) return null;
-            const slotRailGradient = buildRailGradient(slotDate);
             const slotNowPercent = slotDate === selectedDate ? nowPercent : null;
             const isActive = slotDate === activeDate;
 
@@ -570,7 +556,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                       lat={LAT}
                       lng={LNG}
                       timezone={TIMEZONE}
-                      scenery="mountainscape"
+                      scenery={scenery}
                       weatherSegments={getWeatherForDate(slotDate)}
                       isToday={isToday && slotDate === selectedDate}
                       aspectScale={aspectScale}
@@ -644,7 +630,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                       right: 0,
                       transform: 'translateY(-50%)',
                       height: 22,
-                      background: slotRailGradient,
+                      background: 'rgba(4, 6, 18, 0.88)',
                       borderRadius: 4,
                       boxShadow: '0 0 32px rgba(6,182,212,0.12), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.3)',
                       pointerEvents: 'none',

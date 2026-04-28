@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase'
 import { useUIStore } from '@/store/uiStore'
+import type { SceneryPreset } from '@/components/sky/types'
 
 export interface TripPlan {
   id: string
@@ -13,6 +14,7 @@ export interface TripPlan {
   destination_timezone: string | null
   destination_latitude: number | null
   destination_longitude: number | null
+  destination_scenery?: SceneryPreset | null
   number_of_travelers: number
   user_timezone: string | null
   created_at?: string

@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import SliderPanel from './SliderPanel'
 import { useChatStore } from '@/store/chatStore'
 import { useTripStore, PlanItem } from '@/store/tripStore'
+import type { SceneryPreset } from '@/components/sky/types'
 import { useUIStore } from '@/store/uiStore'
 import { useTripsIndexStore } from '@/store/tripsIndexStore'
 import { useHistoryStore } from '@/store/historyStore'
@@ -797,6 +798,7 @@ export default function ChatInterface() {
         destination_timezone: (data.destination_timezone as string) || null,
         destination_latitude: (data.destination_latitude as number) || null,
         destination_longitude: (data.destination_longitude as number) || null,
+        destination_scenery: (data.destination_scenery as SceneryPreset) ?? null,
         number_of_travelers: (data.number_of_travelers as number) || 1,
         user_timezone: (data.user_timezone as string) || null,
       }
