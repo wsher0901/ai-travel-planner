@@ -1,9 +1,7 @@
 'use client';
 import { useMemo, useEffect, useRef, useId } from 'react';
-import { motion } from 'framer-motion';
 import {
   type SunTimes,
-  type SeasonalPalette,
   getHourlySolarElevation,
   getMoonPositionAtMinute,
   getMoonRenderTime,
@@ -16,45 +14,24 @@ interface Props {
   timezone: string;
   date: string;
   isToday: boolean;
-  palette: SeasonalPalette;
   aspectScale?: number;
 }
 
 const HALF_PI = Math.PI / 2;
-
-// Catmull-Rom spline → cubic Bezier path string
-function catmullRomPath(pts: { x: number; y: number }[]): string {
-  if (pts.length < 2) return '';
-  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(i - 1, 0)];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[Math.min(i + 2, pts.length - 1)];
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
-  }
-  return d;
-}
+const ARC_HORIZON_Y = 215;
+const ARC_APEX_Y    = 5;
 
 function interpolatePos(
   samples: { hour: number; altitude: number }[],
   minute: number
 ): { x: number; y: number; altitude: number } {
   const hour = minute / 60;
-  const idx = Math.min(Math.floor(hour), 22);
-  const t = hour - idx;
-  const s0 = samples[idx];
-  const s1 = samples[idx + 1] ?? samples[idx];
+  const idx  = Math.min(Math.floor(hour), 22);
+  const t    = hour - idx;
+  const s0   = samples[idx];
+  const s1   = samples[idx + 1] ?? samples[idx];
   const altitude = s0.altitude + (s1.altitude - s0.altitude) * t;
-  return {
-    x: (hour / 24) * 1000,
-    y: 100 - (altitude / HALF_PI) * 80,
-    altitude,
-  };
+  return { x: (hour / 24) * 1000, y: 100 - (altitude / HALF_PI) * 80, altitude };
 }
 
 function getCurrentMinuteInTimezone(tz: string): number {
@@ -70,100 +47,106 @@ function getCurrentMinuteInTimezone(tz: string): number {
   return h * 60 + m;
 }
 
-export default function CelestialBodies({
-  sunTimes, lat, lng, timezone, date, isToday, palette, aspectScale,
-}: Props) {
-  // rx = r * as makes circles appear circular when preserveAspectRatio="none" stretches non-uniformly
-  const as = aspectScale ?? 1;
+// Returns the y coordinate on a quadratic Bezier at the point closest to targetX.
+// Used to place the noon sun on the arc rather than at the solar-elevation y.
+function bezierYatX(
+  x0: number, ctrlX: number, x1: number,
+  y0: number, ctrlY: number, y1: number,
+  targetX: number,
+): number | null {
+  const a = x0 - 2 * ctrlX + x1;
+  const b = 2 * (ctrlX - x0);
+  const cc = x0 - targetX;
+  let t: number | null = null;
+  if (Math.abs(a) < 0.001) {
+    if (Math.abs(b) > 0.001) t = -cc / b;
+  } else {
+    const disc = b * b - 4 * a * cc;
+    if (disc >= 0) {
+      const t1 = (-b + Math.sqrt(disc)) / (2 * a);
+      const t2 = (-b - Math.sqrt(disc)) / (2 * a);
+      if (t1 >= 0 && t1 <= 1) t = t1;
+      else if (t2 >= 0 && t2 <= 1) t = t2;
+    }
+  }
+  if (t === null) return null;
+  return (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * ctrlY + t * t * y1;
+}
 
-  // Unique IDs per instance — prevents gradient collisions across two-slot animation
+export default function CelestialBodies({
+  sunTimes, lat, lng, timezone, date, isToday, aspectScale,
+}: Props) {
+  const as  = aspectScale ?? 1;
   const uid = useId().replace(/:/g, '-');
-  const ids = {
-    arcGlow:           `ag-${uid}`,
-    arcGradient:       `agr-${uid}`,
-    arcGradientBright: `agrb-${uid}`,
-    sunCore:           `sc-${uid}`,
-    sunMid:            `sm-${uid}`,
-    sunOuter:          `so-${uid}`,
-    sunCoreBright:     `scb-${uid}`,
-    sunMidBright:      `smb-${uid}`,
-    sunOuterBright:    `sob-${uid}`,
-    moonBase:          `mb-${uid}`,
-    moonGlow:          `mg-${uid}`,
-    textShadow:        `ts-${uid}`,
-  };
+  const sunCoreId = `sc-${uid}`;
 
   const hourlyElevations = useMemo(
     () => getHourlySolarElevation(date, lat, lng, timezone),
-    [date, lat, lng, timezone]
+    [date, lat, lng, timezone],
   );
 
-  const { arcPath, noonPos } = useMemo(() => {
-    const dayPts = hourlyElevations
-      .filter(s => s.altitude > 0)
-      .map(s => ({ x: (s.hour / 24) * 1000, y: 100 - (s.altitude / HALF_PI) * 80 }));
+  const { arcPath, noonX, noonY, noonAltitude } = useMemo(() => {
+    const riseMin = sunTimes.sunriseMin;
+    const setMin  = sunTimes.sunsetMin;
+    const nMin    = sunTimes.solarNoonMin;
 
-    const np = Number.isFinite(sunTimes.solarNoonMin)
-      ? interpolatePos(hourlyElevations, sunTimes.solarNoonMin)
-      : null;
+    if (!Number.isFinite(riseMin) || !Number.isFinite(setMin) || !Number.isFinite(nMin)) {
+      return { arcPath: null, noonX: null, noonY: null, noonAltitude: -1 };
+    }
 
-    return { arcPath: catmullRomPath(dayPts), noonPos: np };
-  }, [hourlyElevations, sunTimes.solarNoonMin]);
+    const x0   = (riseMin / 1440) * 1000;
+    const x1   = (setMin  / 1440) * 1000;
+    const cx   = (nMin    / 1440) * 1000;
+    const path = `M ${x0.toFixed(1)} ${ARC_HORIZON_Y} Q ${cx.toFixed(1)} ${ARC_APEX_Y} ${x1.toFixed(1)} ${ARC_HORIZON_Y}`;
+
+    // Noon y from the Bezier so the sun disc sits on the arc
+    const nyResult = bezierYatX(x0, cx, x1, ARC_HORIZON_Y, ARC_APEX_Y, ARC_HORIZON_Y, cx);
+    if (nyResult === null) return { arcPath: path, noonX: null, noonY: null, noonAltitude: -1 };
+    const nalt = interpolatePos(hourlyElevations, nMin).altitude;
+
+    return { arcPath: path, noonX: cx, noonY: nyResult, noonAltitude: nalt };
+  }, [sunTimes, hourlyElevations]);
 
   // Moon
   const moonMinute = useMemo(
     () => getMoonRenderTime(date, lat, lng, timezone),
-    [date, lat, lng, timezone]
+    [date, lat, lng, timezone],
   );
   const moonData = useMemo(
     () => moonMinute !== null ? getMoonPositionAtMinute(date, moonMinute, lat, lng, timezone) : null,
-    [moonMinute, date, lat, lng, timezone]
+    [moonMinute, date, lat, lng, timezone],
   );
   const moonX = moonMinute !== null ? (moonMinute / 1440) * 1000 : null;
-  // y derived from actual lunar altitude so the moon appears at the right elevation
   const moonY = moonData && moonData.altitude > 0
     ? Math.max(15, 100 - (moonData.altitude / HALF_PI) * 80)
     : null;
 
-  // Phase shadow: waxing moves shadow left (showing right), waning moves right (showing left)
-  const mr = 12;
-  const moonPhase = moonData?.phase ?? 0.5;
-  const shadowDx = moonPhase <= 0.5
-    ? -4 * mr * moonPhase        // 0→−2r as phase goes 0→0.5
-    : 4 * mr * (1 - moonPhase);  // 2r→0 as phase goes 0.5→1
+  // Crescent phase — two-circle occlusion method
+  const moonPhase    = moonData?.phase ?? 0;
+  const phaseAngle   = moonPhase * 2 * Math.PI;
+  const shadowDx     = Math.cos(phaseAngle) * 7;
+  const shadowR      = 7;
 
-  // Live "now" marker — ref mutation on 60s tick, no React re-renders
+  // Live "now" marker — ref-mutated on 60 s tick to avoid React re-renders
   const liveRef = useRef<SVGGElement>(null);
 
   useEffect(() => {
     const el = liveRef.current;
     if (!el) return;
-
-    if (!isToday) {
-      el.style.display = 'none';
-      return;
-    }
+    if (!isToday) { el.style.display = 'none'; return; }
 
     const update = (firstRun: boolean) => {
       const g = liveRef.current;
       if (!g) return;
-      const minute = getCurrentMinuteInTimezone(timezone);
+      const minute  = getCurrentMinuteInTimezone(timezone);
       const { x, y, altitude } = interpolatePos(hourlyElevations, minute);
-
-      if (altitude < 0) {
-        g.style.display = 'none';
-        return;
-      }
-
+      if (altitude < 0) { g.style.display = 'none'; return; }
       g.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
-
       if (firstRun) {
-        g.style.opacity = '0';
-        g.style.display = '';
+        g.style.opacity    = '0';
+        g.style.display    = '';
         g.style.transition = 'opacity 600ms ease-out';
-        requestAnimationFrame(() => {
-          if (liveRef.current) liveRef.current.style.opacity = '1';
-        });
+        requestAnimationFrame(() => { if (liveRef.current) liveRef.current.style.opacity = '1'; });
       } else {
         g.style.display = '';
       }
@@ -177,147 +160,45 @@ export default function CelestialBodies({
   return (
     <>
       <defs>
-        <filter id={ids.arcGlow} x="-10%" y="-200%" width="120%" height="500%">
-          <feGaussianBlur stdDeviation="2" />
-        </filter>
-        <filter id={ids.moonGlow} x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="1.5" />
-        </filter>
-        <filter id={ids.textShadow} x="-20%" y="-50%" width="140%" height="200%">
-          <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor="rgba(0,0,0,0.7)" />
-        </filter>
-
-        {/* Arc path gradients — layered luminous arc effect */}
-        <linearGradient id={ids.arcGradient} x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0%"   stopColor="rgba(255,180,110,0)" />
-          <stop offset="15%"  stopColor="rgba(255,200,140,0.45)" />
-          <stop offset="50%"  stopColor="rgba(255,235,200,0.7)" />
-          <stop offset="85%"  stopColor="rgba(255,200,140,0.45)" />
-          <stop offset="100%" stopColor="rgba(255,180,110,0)" />
-        </linearGradient>
-        <linearGradient id={ids.arcGradientBright} x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0%"   stopColor="rgba(255,220,170,0)" />
-          <stop offset="50%"  stopColor="rgba(255,248,220,0.9)" />
-          <stop offset="100%" stopColor="rgba(255,220,170,0)" />
-        </linearGradient>
-
-        {/* Sun noon gradients */}
-        <radialGradient id={ids.sunCore} cx="50%" cy="50%" r="50%" fx="35%" fy="30%">
-          <stop offset="0%" stopColor="#FFF8E0" />
-          <stop offset="100%" stopColor="#FFD56B" />
-        </radialGradient>
-        <radialGradient id={ids.sunMid} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="rgba(255,213,107,0.4)" />
-          <stop offset="100%" stopColor="rgba(255,213,107,0)" />
-        </radialGradient>
-        <radialGradient id={ids.sunOuter} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="rgba(255,213,107,0.2)" />
-          <stop offset="100%" stopColor="rgba(255,213,107,0)" />
-        </radialGradient>
-
-        {/* Live "now" marker gradients — slightly brighter */}
-        <radialGradient id={ids.sunCoreBright} cx="50%" cy="50%" r="50%" fx="35%" fy="30%">
-          <stop offset="0%" stopColor="#FFFDE0" />
-          <stop offset="100%" stopColor="#FFE08A" />
-        </radialGradient>
-        <radialGradient id={ids.sunMidBright} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="rgba(255,230,140,0.5)" />
-          <stop offset="100%" stopColor="rgba(255,230,140,0)" />
-        </radialGradient>
-        <radialGradient id={ids.sunOuterBright} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="rgba(255,230,140,0.28)" />
-          <stop offset="100%" stopColor="rgba(255,230,140,0)" />
-        </radialGradient>
-
-        {/* Moon */}
-        <radialGradient id={ids.moonBase} cx="50%" cy="50%" r="50%" fx="38%" fy="32%">
-          <stop offset="0%" stopColor="#F4F0E8" />
-          <stop offset="100%" stopColor="#C4BCA8" />
+        {/* Sun: warm core fading to transparent edge */}
+        <radialGradient id={sunCoreId} cx="50%" cy="50%" r="50%">
+          <stop offset="0%"   stopColor="#FFF8E0" />
+          <stop offset="60%"  stopColor="#FFD56B" />
+          <stop offset="100%" stopColor="#FFD56B" stopOpacity="0" />
         </radialGradient>
       </defs>
 
-      {/* Layer 1 — outer halo (blurred, widest) */}
+      {/* Sun arc — single dotted quadratic Bezier from sunrise to sunset */}
       {arcPath && (
         <path
           d={arcPath}
-          stroke="rgba(255,200,130,0.06)"
-          strokeWidth={6}
-          strokeLinecap="round"
           fill="none"
-          filter={`url(#${ids.arcGlow})`}
-        />
-      )}
-
-      {/* Layer 2 — soft glow */}
-      {arcPath && (
-        <path
-          d={arcPath}
-          stroke={`url(#${ids.arcGradient})`}
-          strokeWidth={2.5}
+          stroke="rgba(255, 220, 180, 0.35)"
+          strokeWidth={1.5}
+          strokeDasharray="3 4"
           strokeLinecap="round"
-          fill="none"
-        />
-      )}
-
-      {/* Layer 3 — bright thin trace */}
-      {arcPath && (
-        <path
-          d={arcPath}
-          stroke={`url(#${ids.arcGradientBright})`}
-          strokeWidth={0.8}
-          strokeDasharray="2 3"
-          strokeLinecap="round"
-          fill="none"
         />
       )}
 
       {/* Solar noon marker */}
-      {noonPos && noonPos.altitude > 0 && (
-        <g transform={`translate(${noonPos.x.toFixed(1)} ${noonPos.y.toFixed(1)})`}>
-          {/* Pulsing outer glow — CSS transform (compositor-eligible) */}
-          <g className="sun-ambi-pulse">
-            <ellipse rx={28 * as} ry={28} fill={`url(#${ids.sunOuter})`} />
-          </g>
-          <ellipse rx={20 * as} ry={20} fill={`url(#${ids.sunMid})`} />
-          <ellipse rx={14 * as} ry={14} fill={`url(#${ids.sunCore})`} />
+      {noonX !== null && noonY !== null && noonAltitude > 0 && (
+        <g transform={`translate(${noonX.toFixed(1)} ${noonY.toFixed(1)})`}>
+          <ellipse rx={20 * as} ry={20} fill="rgba(255, 213, 107, 0.22)" />
+          <ellipse rx={11 * as} ry={11} fill={`url(#${sunCoreId})`} />
         </g>
       )}
 
-      {/* Live "now" marker — position updated via ref, no React re-renders */}
+      {/* Live "now" marker — position updated imperatively */}
       <g ref={liveRef} style={{ display: 'none', willChange: 'transform' }}>
-        <ellipse rx={36 * as} ry={36} fill={`url(#${ids.sunOuterBright})`} />
-        <ellipse rx={26 * as} ry={26} fill={`url(#${ids.sunMidBright})`} />
-        <ellipse rx={18 * as} ry={18} fill={`url(#${ids.sunCoreBright})`} />
-        {/* Rotating orbital ring — CSS animation via class */}
-        <g className="sky-orbit-ring">
-          <ellipse rx={24 * as} ry={24} fill="none" stroke="rgba(255,220,130,0.3)" strokeWidth={1.0} strokeDasharray="3 4" />
-        </g>
+        <ellipse rx={24 * as} ry={24} fill="rgba(255, 213, 107, 0.28)" />
+        <ellipse rx={13 * as} ry={13} fill={`url(#${sunCoreId})`} />
       </g>
 
-      {/* Moon — only when above horizon */}
-      {moonX !== null && moonData && moonY !== null && (
+      {/* Moon — two-circle crescent */}
+      {moonX !== null && moonY !== null && (
         <g transform={`translate(${moonX.toFixed(1)} ${moonY.toFixed(1)})`}>
-          {/* Soft outer glow */}
-          <ellipse rx={mr * as} ry={mr} fill={`url(#${ids.moonBase})`} filter={`url(#${ids.moonGlow})`} opacity={0.45} />
-          {/* Moon disc */}
-          <ellipse rx={mr * as} ry={mr} fill={`url(#${ids.moonBase})`} />
-          {/* Phase shadow: an ellipse offset to reveal only the lit crescent */}
-          {moonPhase !== 0.5 && (
-            <ellipse
-              rx={mr * as}
-              ry={mr}
-              cx={shadowDx}
-              cy={0}
-              fill={palette.nightDeep}
-              opacity={moonPhase === 0 || moonPhase === 1 ? 0.95 : 0.9}
-            />
-          )}
-          {/* Subtle craters */}
-          <ellipse cx={-3.2} cy={-2.8} rx={0.7 * as}  ry={0.7}  fill="rgba(150,140,120,0.18)" />
-          <ellipse cx={3.1}  cy={2.2}  rx={0.45 * as} ry={0.45} fill="rgba(150,140,120,0.15)" />
-          <ellipse cx={-1.8} cy={4.2}  rx={0.55 * as} ry={0.55} fill="rgba(150,140,120,0.16)" />
-          <ellipse cx={4.2}  cy={-3.8} rx={0.35 * as} ry={0.35} fill="rgba(150,140,120,0.12)" />
-          <ellipse cx={-5.1} cy={1.9}  rx={0.4 * as}  ry={0.4}  fill="rgba(150,140,120,0.13)" />
+          <ellipse rx={7 * as} ry={7} fill="#F4F0E8" />
+          <ellipse cx={shadowDx} rx={shadowR * as} ry={shadowR} fill="#1A2444" />
         </g>
       )}
     </>

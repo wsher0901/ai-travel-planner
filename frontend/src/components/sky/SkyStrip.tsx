@@ -36,9 +36,11 @@ export default function SkyStrip({
       isolation: 'isolate',
     }}>
       {/* z0: seasonal CSS gradient backdrop */}
-      <SkyGradient sunTimes={sunTimes} palette={palette} />
+      <SkyGradient sunTimes={sunTimes} />
 
-      {/* z1: SVG overlay — stars and celestial arc */}
+      {/* z1: SVG overlay — stars, weather, and celestial arc.
+          WeatherLayers renders before CelestialBodies so cloud cover sits
+          visually in front of the sun arc (occlusion comes in 2c). */}
       <svg
         style={{
           position: 'absolute', inset: 0,
@@ -56,6 +58,7 @@ export default function SkyStrip({
           latSeed={lat}
           dateSeed={date}
         />
+        <WeatherLayers segments={weatherSegments} palette={palette} />
         <CelestialBodies
           sunTimes={sunTimes}
           lat={lat}
@@ -63,13 +66,9 @@ export default function SkyStrip({
           timezone={timezone}
           date={date}
           isToday={isToday}
-          palette={palette}
           aspectScale={aspectScale}
         />
       </svg>
-
-      {/* z2: weather overlays (currently inert) */}
-      <WeatherLayers segments={weatherSegments} />
 
       {/* Scenery silhouette always on top */}
       <Scenery preset={scenery} />

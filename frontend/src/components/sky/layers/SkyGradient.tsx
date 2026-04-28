@@ -1,68 +1,55 @@
 'use client';
 import { useMemo } from 'react';
-import { type SunTimes, minToPercent } from '@/lib/sunPosition';
-import { type SeasonalPalette } from '@/components/sky/types';
+import { type SunTimes } from '@/lib/sunPosition';
 
-interface Props { sunTimes: SunTimes; palette: SeasonalPalette; }
+interface Props { sunTimes: SunTimes; }
 
 function safeMin(value: number, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
-export default function SkyGradient({ sunTimes, palette }: Props) {
+function c(v: number): number {
+  return Math.max(0, Math.min(100, v));
+}
+
+export default function SkyGradient({ sunTimes }: Props) {
   const gradient = useMemo(() => {
-    const {
-      astronomicalDawnMin: rawAstroD,
-      dawnMin: rawDawn,
-      sunriseMin: rawRise,
-      solarNoonMin: rawNoon,
-      sunsetMin: rawSet,
-      duskMin: rawDusk,
-      astronomicalDuskMin: rawAstroK,
-    } = sunTimes;
+    const nightEndPct = c(safeMin(sunTimes.astronomicalDawnMin, 330) / 1440 * 100);
+    const dawnPct     = c(safeMin(sunTimes.dawnMin,             360) / 1440 * 100);
+    const sunrisePct  = c(safeMin(sunTimes.sunriseMin,          390) / 1440 * 100);
+    const noonPct     = c(safeMin(sunTimes.solarNoonMin,        720) / 1440 * 100);
+    const sunsetPct   = c(safeMin(sunTimes.sunsetMin,          1050) / 1440 * 100);
+    const duskPct     = c(safeMin(sunTimes.duskMin,            1080) / 1440 * 100);
+    const nightPct    = c(safeMin(sunTimes.astronomicalDuskMin, 1110) / 1440 * 100);
 
-    const astronomicalDawnMin = safeMin(rawAstroD, 330);
-    const dawnMin            = safeMin(rawDawn,  360);
-    const sunriseMin         = safeMin(rawRise,  390);
-    const solarNoonMin       = safeMin(rawNoon,  720);
-    const sunsetMin          = safeMin(rawSet,  1110);
-    const duskMin            = safeMin(rawDusk, 1140);
-    const astronomicalDuskMin = safeMin(rawAstroK, 1170);
+    const stops: Array<[number, string]> = [
+      [0,                       '#04071A'],
+      [c(nightEndPct - 3),      '#04071A'],
+      [nightEndPct,             '#0E1838'],
+      [c(dawnPct - 2),          '#2A1F52'],
+      [dawnPct,                 '#6A3A58'],
+      [c(sunrisePct - 1),       '#C4623E'],
+      [sunrisePct,              '#ECAA6A'],
+      [c(sunrisePct + 1),       '#F5CFA0'],
+      [c(sunrisePct + 3),       '#C8DCEC'],
+      [c(sunrisePct + 6),       '#8EC2E8'],
+      [noonPct,                 '#72B6E8'],
+      [c(sunsetPct - 6),        '#8EC2E8'],
+      [c(sunsetPct - 3),        '#C4B488'],
+      [c(sunsetPct - 1),        '#E0A470'],
+      [sunsetPct,               '#E8833E'],
+      [c(sunsetPct + 1),        '#C64A28'],
+      [duskPct,                 '#7A2E48'],
+      [c(duskPct + 2),          '#3A2048'],
+      [nightPct,                '#161838'],
+      [100,                     '#06081C'],
+    ];
 
-    const rawStops: Array<[number, string]> = [];
-    const add = (pct: number, color: string) => {
-      rawStops.push([Math.max(0, Math.min(100, pct)), color]);
-    };
-
-    add(0, palette.nightDeep);
-    add(minToPercent(astronomicalDawnMin) - 2, palette.nightDeep);
-    add(minToPercent(astronomicalDawnMin), '#0e1838');
-    add(minToPercent(dawnMin) - 1, '#2a1f52');
-    add(minToPercent(dawnMin), '#6a3a58');
-    add(minToPercent(sunriseMin) - 0.5, palette.dawnAmber);
-    add(minToPercent(sunriseMin), '#f5cfa0');
-    add(minToPercent(sunriseMin) + 1.5, palette.dayPrimary);
-    add(minToPercent(sunriseMin) + 3, palette.dayDeep);
-    add(minToPercent(solarNoonMin), palette.dayPrimary);
-    add(minToPercent(sunsetMin) - 3, palette.dayDeep);
-    add(minToPercent(sunsetMin) - 1.5, palette.duskAmber);
-    add(minToPercent(sunsetMin), palette.duskAmber);
-    add(minToPercent(sunsetMin) + 0.5, '#c64a28');
-    add(minToPercent(duskMin), '#7a2e48');
-    add(minToPercent(duskMin) + 1, '#3a2048');
-    add(minToPercent(astronomicalDuskMin), palette.nightDeep);
-    add(100, palette.nightDeep);
-
-    rawStops.sort((a, b) => a[0] - b[0]);
-    const stops = rawStops.map(([pct, color]) => `${color} ${pct.toFixed(2)}%`);
-    return `linear-gradient(90deg, ${stops.join(', ')})`;
-  }, [sunTimes, palette]);
+    stops.sort((a, b) => a[0] - b[0]);
+    return `linear-gradient(90deg, ${stops.map(([pct, col]) => `${col} ${pct.toFixed(2)}%`).join(', ')})`;
+  }, [sunTimes]);
 
   return (
-    <div style={{
-      position: 'absolute', inset: 0, zIndex: 0,
-      background: gradient,
-      filter: 'saturate(1.05)',
-    }} />
+    <div style={{ position: 'absolute', inset: 0, zIndex: 0, background: gradient }} />
   );
 }
