@@ -19,6 +19,8 @@ const containerStyle: CSSProperties = {
   background: 'rgba(6, 182, 212, 0.04)',
   borderTop: '0.5px solid rgba(6, 182, 212, 0.12)',
   borderBottom: '0.5px solid rgba(6, 182, 212, 0.12)',
+  paddingLeft: '6px',
+  paddingRight: '6px',
 }
 
 function labelStyle(pct: number, anchor: 'start' | 'center' | 'end'): CSSProperties {
@@ -29,8 +31,9 @@ function labelStyle(pct: number, anchor: 'start' | 'center' | 'end'): CSSPropert
     top: '50%',
     transform: `translate(${tx}, -50%)`,
     fontFamily: 'var(--font-mono, monospace)',
-    fontSize: '10px',
-    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: '11px',
+    fontWeight: 500,
+    color: 'rgba(255, 255, 255, 0.7)',
     whiteSpace: 'nowrap',
     pointerEvents: 'none',
     letterSpacing: '0.02em',
