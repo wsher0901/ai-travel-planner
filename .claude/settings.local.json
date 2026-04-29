@@ -55,10 +55,14 @@
       "mcp__chrome-devtools__performance_analyze_insight",
       "Bash(git -C \"C:/Users/wonse/MyFile/Coding/ai-travel-planner\" diff HEAD -- frontend/src/components/sky/layers/TimeAxis.tsx)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "mcp__plugin_playwright_playwright__browser_click",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "mcp__plugin_playwright_playwright__browser_console_messages",
+      "mcp__plugin_playwright_playwright__browser_evaluate",
+      "mcp__plugin_playwright_playwright__browser_navigate"
     ]
   },
-  "model": "sonnet",
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"

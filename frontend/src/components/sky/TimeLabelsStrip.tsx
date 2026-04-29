@@ -19,25 +19,24 @@ const containerStyle: CSSProperties = {
   background: 'rgba(6, 182, 212, 0.04)',
   borderTop: '0.5px solid rgba(6, 182, 212, 0.12)',
   borderBottom: '0.5px solid rgba(6, 182, 212, 0.12)',
-  paddingLeft: '6px',
-  paddingRight: '6px',
+}
+
+const baseLabel: CSSProperties = {
+  position: 'absolute',
+  top: '50%',
+  fontFamily: 'var(--font-mono, monospace)',
+  fontSize: '14px',
+  fontWeight: 500,
+  color: 'rgba(255, 255, 255, 0.9)',
+  whiteSpace: 'nowrap',
+  pointerEvents: 'none',
+  letterSpacing: '0.02em',
 }
 
 function labelStyle(pct: number, anchor: 'start' | 'center' | 'end'): CSSProperties {
-  const tx = anchor === 'start' ? '0' : anchor === 'end' ? '-100%' : '-50%'
-  return {
-    position: 'absolute',
-    left: `${pct}%`,
-    top: '50%',
-    transform: `translate(${tx}, -50%)`,
-    fontFamily: 'var(--font-mono, monospace)',
-    fontSize: '11px',
-    fontWeight: 500,
-    color: 'rgba(255, 255, 255, 0.7)',
-    whiteSpace: 'nowrap',
-    pointerEvents: 'none',
-    letterSpacing: '0.02em',
-  }
+  if (anchor === 'start') return { ...baseLabel, left: '8px',  transform: 'translateY(-50%)' }
+  if (anchor === 'end')   return { ...baseLabel, right: '8px', transform: 'translateY(-50%)' }
+  return { ...baseLabel, left: `${pct}%`, transform: 'translate(-50%, -50%)' }
 }
 
 export function TimeLabelsStrip() {

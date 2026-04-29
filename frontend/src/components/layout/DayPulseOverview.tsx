@@ -164,7 +164,9 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
 
   const rawScenery = useTripStore((s) => s.tripPlan?.destination_scenery);
   const destination = useTripStore((s) => s.tripPlan?.destination ?? '');
-  const scenery: SceneryPreset = rawScenery ?? inferScenery(destination);
+  // TODO TEMP: hardcoded to 'oceanscape' for visual verification of OceanScene.
+  // Revert to `rawScenery ?? inferScenery(destination)` (or 'cityscape') after review.
+  const scenery: SceneryPreset = 'oceanscape';
 
   const outerRef = useRef<HTMLDivElement>(null);
   const skyViewportRef = useRef<HTMLDivElement>(null);
@@ -516,7 +518,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
         ref={skyViewportRef}
         style={{
           position: 'absolute', top: 0, left: 0,
-          width: '100%', height: '60%',
+          width: '100%', height: '70%',
           pointerEvents: 'none', visibility: 'hidden',
         }}
       />
@@ -548,8 +550,8 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 display: 'flex',
                 flexDirection: 'column',
               }}>
-                {/* Layer 1 — Sky (60%) */}
-                <div style={{ flex: '60 1 0', minHeight: 0, position: 'relative' }}>
+                {/* Layer 1 — Sky (70%) */}
+                <div style={{ flex: '70 1 0', minHeight: 0, position: 'relative' }}>
                   {slotDate && skyViewportWidth > 0 && (
                     <SkyStrip
                       date={slotDate}
@@ -564,13 +566,13 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                   )}
                 </div>
 
-                {/* Layer 2 — Time labels (6%) */}
-                <div style={{ flex: '6 1 0', minHeight: 0, position: 'relative' }}>
+                {/* Layer 2 — Time labels (7%) */}
+                <div style={{ flex: '7 1 0', minHeight: 0, position: 'relative' }}>
                   <TimeLabelsStrip />
                 </div>
 
-                {/* Layer 3 — Annotation placeholder (12%) */}
-                <div style={{ flex: '12 1 0', minHeight: 0, position: 'relative' }}>
+                {/* Layer 3 — Annotation placeholder (8%) */}
+                <div style={{ flex: '8 1 0', minHeight: 0, position: 'relative' }}>
                   <div style={{
                     width: '100%', height: '100%',
                     borderTop: '0.5px dashed rgba(6, 182, 212, 0.1)',
@@ -578,11 +580,11 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                   }} />
                 </div>
 
-                {/* Layer 4 — Pills (22%) */}
+                {/* Layer 4 — Pills (15%) */}
                 <div style={{
-                  flex: '22 1 0',
+                  flex: '15 1 0',
                   minHeight: 0,
-                  padding: '8px 0',
+                  padding: '4px 0',
                   display: 'flex',
                   alignItems: 'center',
                   position: 'relative',
@@ -636,20 +638,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                       pointerEvents: 'none',
                     }}
                   />
-
-                  {[25, 50, 75].map((pct) => (
-                    <div key={pct} style={{
-                      position: 'absolute',
-                      top: 'calc(50% + 10px)',
-                      left: `${pct}%`,
-                      transform: 'translateX(-50%)',
-                      width: 2,
-                      height: 2,
-                      borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.35)',
-                      pointerEvents: 'none',
-                    }} />
-                  ))}
 
                   {slotDate && skyViewportWidth > 0 && renderPillsForDay(slotDate)}
                 </div>

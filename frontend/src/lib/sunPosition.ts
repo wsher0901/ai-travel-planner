@@ -80,7 +80,7 @@ const sunTimesCache = new Map<string, SunTimes>();
 export function getSunTimes(date: string, lat: number, lng: number, timezone: string = 'UTC'): SunTimes {
   const key = `${date}|${lat}|${lng}|${timezone}`;
   const cached = sunTimesCache.get(key);
-  if (cached) return cached;
+  if (cached !== undefined) return cached;
 
   // Use 'Z' suffix to force UTC parsing, avoiding local-timezone offset bugs.
   const d = new Date(date + 'T12:00:00Z');
@@ -118,7 +118,7 @@ export function getHourlySolarElevation(
 ): { hour: number; altitude: number; azimuth: number }[] {
   const key = `${date}|${lat}|${lng}|${timezone}`;
   const cached = hourlyElevationCache.get(key);
-  if (cached) return cached;
+  if (cached !== undefined) return cached;
 
   const midnight = localMidnightAsUTC(date, timezone);
   const result = Array.from({ length: 24 }, (_, hour) => {
@@ -161,6 +161,41 @@ export function getMoonRenderTime(
   if (nightDuration <= 30) return null;
   const midpoint = st.duskMin + nightDuration / 2;
   return Math.round(midpoint >= 1440 ? midpoint - 1440 : midpoint);
+}
+
+// Module-level cache for moon peak altitude minute.
+const moonPeakCache = new Map<string, number | null>();
+
+// Returns the minute (hour * 60) of the moon's peak altitude during the given date,
+// or null if the moon never rises (peak altitude ≤ 0). Checked hourly for performance.
+export function getMoonPeakMinute(
+  date: string, lat: number, lng: number, timezone: string
+): number | null {
+  const key = `${date}|${lat}|${lng}|${timezone}`;
+  const cached = moonPeakCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const midnight = localMidnightAsUTC(date, timezone);
+  let peakAltitude = -Infinity;
+  let peakHour = 0;
+
+  for (let hour = 0; hour < 24; hour++) {
+    const t = new Date(midnight + hour * 3600000);
+    const pos = SunCalc.getMoonPosition(t, lat, lng);
+    if (pos.altitude > peakAltitude) {
+      peakAltitude = pos.altitude;
+      peakHour = hour;
+    }
+  }
+
+  const result = peakAltitude > 0 ? peakHour * 60 : null;
+
+  if (moonPeakCache.size >= 200) {
+    const firstKey = moonPeakCache.keys().next().value;
+    if (firstKey !== undefined) moonPeakCache.delete(firstKey);
+  }
+  moonPeakCache.set(key, result);
+  return result;
 }
 
 // Sky color palette that shifts by season. Southern hemisphere months are offset by 6.
