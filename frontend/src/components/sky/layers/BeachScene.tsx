@@ -152,12 +152,12 @@ const PALM_RIGHT_PATH =
   ' M 1000 8 Q 971.2 29.1 938 56 Q 968.8 25.9 1000 4 Z' +
   ' M 992 0 Q 984.94 30.41 972 68 Q 982.06 29.59 996 0 Z';
 
-export default function OceanScene() {
+export default function BeachScene() {
   const uid = useId().replace(/:/g, '');
-  const landId = `ocean-land-${uid}`;
-  const waterId = `ocean-continuous-${uid}`;
-  const sandId = `ocean-sand-${uid}`;
-  const hazeId = `ocean-haze-${uid}`;
+  const landId = `beach-land-${uid}`;
+  const waterId = `beach-continuous-${uid}`;
+  const sandId = `beach-sand-${uid}`;
+  const hazeId = `beach-haze-${uid}`;
 
   const waveStrokes = useMemo(
     () => genWaveStrokes(32, 152, 183, 14, 0.35, 0.6),
@@ -186,14 +186,14 @@ export default function OceanScene() {
     >
       <defs>
         <linearGradient id={landId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#5a6080" />
-          <stop offset="100%" stopColor="#3a4060" />
+          <stop offset="0%" stopColor="#586580" />
+          <stop offset="100%" stopColor="#3c4862" />
         </linearGradient>
         <linearGradient id={waterId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#404560" />
-          <stop offset="35%" stopColor="#2a2e48" />
-          <stop offset="70%" stopColor="#1f2238" />
-          <stop offset="100%" stopColor="#14162a" />
+          <stop offset="0%" stopColor="#3c4862" />
+          <stop offset="35%" stopColor="#28304a" />
+          <stop offset="70%" stopColor="#1d263e" />
+          <stop offset="100%" stopColor="#182032" />
         </linearGradient>
         <linearGradient id={sandId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#3a3540" />
@@ -230,7 +230,7 @@ export default function OceanScene() {
           y1={s.y.toFixed(2)}
           x2={s.x2.toFixed(2)}
           y2={s.y.toFixed(2)}
-          stroke="#5a6080"
+          stroke="#586580"
           strokeWidth="0.5"
           opacity={s.opacity.toFixed(2)}
         />
@@ -244,14 +244,14 @@ export default function OceanScene() {
             y={boat.hullY.toFixed(2)}
             width={boat.hullWidth.toFixed(2)}
             height="1.5"
-            fill="#1a1c30"
+            fill="#182032"
           />
           <line
             x1={boat.centerX.toFixed(2)}
             y1={boat.mastTopY.toFixed(2)}
             x2={boat.centerX.toFixed(2)}
             y2={boat.hullY.toFixed(2)}
-            stroke="#1a1c30"
+            stroke="#182032"
             strokeWidth="0.5"
           />
         </g>

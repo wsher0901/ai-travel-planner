@@ -164,9 +164,9 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
 
   const rawScenery = useTripStore((s) => s.tripPlan?.destination_scenery);
   const destination = useTripStore((s) => s.tripPlan?.destination ?? '');
-  // TODO TEMP: hardcoded to 'oceanscape' for visual verification of OceanScene.
+  // TODO TEMP: hardcoded for forestscape visual testing — revert after verification.
   // Revert to `rawScenery ?? inferScenery(destination)` (or 'cityscape') after review.
-  const scenery: SceneryPreset = 'oceanscape';
+  const scenery: SceneryPreset = 'forestscape';
 
   const outerRef = useRef<HTMLDivElement>(null);
   const skyViewportRef = useRef<HTMLDivElement>(null);

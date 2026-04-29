@@ -266,16 +266,16 @@ export default function CityScene() {
     >
       <defs>
         <linearGradient id={farId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#5a6080" />
-          <stop offset="100%" stopColor="#3a4060" />
+          <stop offset="0%" stopColor="#5e5880" />
+          <stop offset="100%" stopColor="#443e60" />
         </linearGradient>
         <linearGradient id={midId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3a4060" />
-          <stop offset="100%" stopColor="#22263c" />
+          <stop offset="0%" stopColor="#443e60" />
+          <stop offset="100%" stopColor="#2c2848" />
         </linearGradient>
         <linearGradient id={frontId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#22263c" />
-          <stop offset="100%" stopColor="#0e1020" />
+          <stop offset="0%" stopColor="#2c2848" />
+          <stop offset="100%" stopColor="#1a1830" />
         </linearGradient>
         <filter id={hazeId} x="-2%" y="-2%" width="104%" height="104%">
           <feGaussianBlur stdDeviation="0.4" />
@@ -315,7 +315,7 @@ export default function CityScene() {
           y1={a.bottomY.toFixed(2)}
           x2={a.x.toFixed(2)}
           y2={a.topY.toFixed(2)}
-          stroke="#0e1020"
+          stroke="#1a1830"
           strokeWidth="0.6"
           opacity="0.95"
         />
