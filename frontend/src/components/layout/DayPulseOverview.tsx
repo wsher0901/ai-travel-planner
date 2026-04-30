@@ -166,7 +166,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
   const destination = useTripStore((s) => s.tripPlan?.destination ?? '');
   // TODO TEMP: hardcoded for forestscape visual testing — revert after verification.
   // Revert to `rawScenery ?? inferScenery(destination)` (or 'cityscape') after review.
-  const scenery: SceneryPreset = 'forestscape';
+  const scenery: SceneryPreset = 'mountainscape';
 
   const outerRef = useRef<HTMLDivElement>(null);
   const skyViewportRef = useRef<HTMLDivElement>(null);
