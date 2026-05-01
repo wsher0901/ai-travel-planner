@@ -25,7 +25,7 @@ const baseLabel: CSSProperties = {
   position: 'absolute',
   top: '50%',
   fontFamily: 'var(--font-mono, monospace)',
-  fontSize: '14px',
+  fontSize: '11px',
   fontWeight: 500,
   color: 'rgba(255, 255, 255, 0.9)',
   whiteSpace: 'nowrap',

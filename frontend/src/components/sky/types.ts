@@ -24,12 +24,18 @@ export interface WeatherSegment {
 
 export type SceneryPreset = 'cityscape' | 'beachscape' | 'mountainscape' | 'desertscape' | 'forestscape';
 
+export type WalkerPreset = 'none' | 'person';
+
 export interface SkyStripProps {
   date: string;
   lat: number;
   lng: number;
   timezone?: string;
   scenery?: SceneryPreset;
+  walker?: WalkerPreset;
+  // Pre-computed by DayPulseOverview so both SkyStrip and AnnotationStrip share
+  // the same source. Null = not today (no walker rendered).
+  walkerXPercent?: number | null;
   weatherSegments?: WeatherSegment[];
   palette?: SeasonalPalette;
   isToday?: boolean;

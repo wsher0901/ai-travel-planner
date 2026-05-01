@@ -6,7 +6,6 @@ import {
   AlertCircle,
   BarChart3,
   CloudRain,
-  PersonStanding,
   Snowflake,
   Sunrise,
   Sunset,
@@ -18,19 +17,13 @@ import { useTripWeather } from '@/hooks/useTripWeather';
 import { mapToConditionTier } from '@/lib/weather/mapping';
 import type { DayWeather, WeatherCondition } from '@/lib/weather/types';
 
-const ICON_SIZE = 22;
+const ICON_SIZE = 18;
 const GAP = 5;
-// Approximate width of a Sora-10px tabular-nums clock label like "11:00 AM" — used
-// only for collision detection so labels don't overlap. ResizeObserver isn't needed;
-// the worst case is a one-frame jitter at the boundary which we don't care about.
-const LABEL_WIDTH_APPROX = 50;
-// Visual overlap threshold: when |static.x − walker.x| < this, walker would crash
-// into the static icon (or vice versa) once the right-side time labels are drawn.
-const COLLISION_DETECT_PX = ICON_SIZE / 2 + GAP + LABEL_WIDTH_APPROX + ICON_SIZE / 2;
-// In side-by-side mode walker stays put with its time flipped to the LEFT, leaving
-// only the icon on its right; static icon center sits one icon-width + small gap right.
+// Horizontal collision threshold = icon center-to-center distance below which
+// two icons overlap. Label is below icon so only the icon footprint matters.
+const COLLISION_DETECT_PX = ICON_SIZE + GAP;
+// How far right to nudge the yielding icon to clear the blocker.
 const SIDE_BY_SIDE_GAP_PX = ICON_SIZE + GAP;
-const WALKER_TICK_MS = 300_000;
 
 const SUNRISE_COLOR = '#fbbf24';
 const SUNSET_COLOR = '#f97316';
@@ -61,6 +54,17 @@ function formatHourClock(hour: number): string {
   return `${h12}:00 ${period}`;
 }
 
+function formatClockCompact(date: Date): string {
+  const h12 = date.getHours() % 12 === 0 ? 12 : date.getHours() % 12;
+  return `${h12}:${date.getMinutes().toString().padStart(2, '0')}`;
+}
+
+function formatHourClockCompact(hour: number): string {
+  const h24 = ((hour % 24) + 24) % 24;
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:00`;
+}
+
 function dateMinuteToPercent(d: Date): number {
   return ((d.getHours() * 60 + d.getMinutes()) / DAY_MINUTES) * 100;
 }
@@ -70,9 +74,6 @@ interface PrecipTransition {
   mode: 'rain' | 'snow';
 }
 
-// Walk hourly entries in order, emitting one transition each time the tier
-// flips from non-rain → rain (or non-snow → snow). prevTier=null at hour 0
-// means hour-0 rain still counts as a fresh "rain begins" marker.
 function detectPrecipTransitions(day: DayWeather): PrecipTransition[] {
   const out: PrecipTransition[] = [];
   const sorted = [...day.hourly].sort((a, b) => a.hour - b.hour);
@@ -91,58 +92,44 @@ function detectPrecipTransitions(day: DayWeather): PrecipTransition[] {
 }
 
 interface Props {
-  // Slot date (YYYY-MM-DD). Drives sunrise/sunset and rain transition icons.
   date: string;
+  // x-position of the "now" walker as a percentage of strip width (0–100).
+  // Null when not today — collision math skips walker entirely.
+  walkerXPercent: number | null;
 }
 
-export default function AnnotationStrip({ date }: Props) {
+export default function AnnotationStrip({ date, walkerXPercent }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
-  const [now, setNow] = useState<Date | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const tripId = useTripStore((s) => s.tripPlan?.id ?? null);
   const weather = useTripWeather(tripId);
 
   useEffect(() => {
-    setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), WALKER_TICK_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     setContainerWidth(el.getBoundingClientRect().width);
     const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
-      }
+      for (const entry of entries) setContainerWidth(entry.contentRect.width);
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  // Look up the day directly from the hook's daysData. AnnotationStrip is
-  // outside the SceneAtmosphereProvider tree, so we go straight to the hook.
   const dayWeather = weather.daysData.get(date) ?? null;
 
-  // Sunrise/sunset come from real (or mock-synthesized) weather data.
-  // Rain/snow transitions detected by walking the hourly tier.
   const annotations: StaticAnnotation[] = useMemo(() => {
     if (!dayWeather) return [];
     const out: StaticAnnotation[] = [];
-
     const meta = dayWeather.daily;
-    const sunrisePct = dateMinuteToPercent(meta.sunrise);
-    const sunsetPct = dateMinuteToPercent(meta.sunset);
     out.push({
       id: 'sunrise',
       Icon: Sunrise,
       color: SUNRISE_COLOR,
       label: 'Sunrise',
       time: formatClock(meta.sunrise),
-      truePercent: sunrisePct,
+      truePercent: dateMinuteToPercent(meta.sunrise),
     });
     out.push({
       id: 'sunset',
@@ -150,11 +137,9 @@ export default function AnnotationStrip({ date }: Props) {
       color: SUNSET_COLOR,
       label: 'Sunset',
       time: formatClock(meta.sunset),
-      truePercent: sunsetPct,
+      truePercent: dateMinuteToPercent(meta.sunset),
     });
-
-    const transitions = detectPrecipTransitions(dayWeather);
-    for (const t of transitions) {
+    for (const t of detectPrecipTransitions(dayWeather)) {
       out.push({
         id: `${t.mode}-${t.hour}`,
         Icon: t.mode === 'snow' ? Snowflake : CloudRain,
@@ -167,36 +152,73 @@ export default function AnnotationStrip({ date }: Props) {
     return out;
   }, [dayWeather]);
 
-  const walkerMinutes = now ? now.getHours() * 60 + now.getMinutes() : 0;
-  const walkerPercent = (walkerMinutes / DAY_MINUTES) * 100;
+  // --- Collision resolution ---
+  // Sort icons left-to-right by true position. Walker acts as a fixed blocker.
+  // Each static yields rightward if it collides with its left neighbour OR with
+  // the walker. Capped at 2 cascading shifts per icon (H3 leftmost-stable policy).
 
-  // Only the chronologically closest static within the threshold gets the
-  // side-by-side treatment — keeps the layout unambiguous when walker
-  // happens to be near several.
-  let collidingStaticId: string | null = null;
-  if (now && containerWidth > 0) {
-    const walkerPx = (walkerPercent / 100) * containerWidth;
-    let closestDist = COLLISION_DETECT_PX;
-    for (const a of annotations) {
-      const truePx = (a.truePercent / 100) * containerWidth;
-      const dist = Math.abs(truePx - walkerPx);
-      if (dist < closestDist) {
-        closestDist = dist;
-        collidingStaticId = a.id;
+  const positions: Array<StaticAnnotation & { displayPercent: number; compact: boolean }> =
+    useMemo(() => {
+      if (containerWidth <= 0) {
+        return annotations.map((a) => ({ ...a, displayPercent: a.truePercent, compact: false }));
       }
-    }
-  }
 
-  const positions = annotations.map((a) => {
-    if (a.id === collidingStaticId && containerWidth > 0) {
-      const walkerPx = (walkerPercent / 100) * containerWidth;
-      const shiftedPx = walkerPx + SIDE_BY_SIDE_GAP_PX;
-      return { ...a, displayPercent: (shiftedPx / containerWidth) * 100 };
-    }
-    return { ...a, displayPercent: a.truePercent };
-  });
+      const walkerPx = walkerXPercent !== null ? (walkerXPercent / 100) * containerWidth : null;
 
-  const walkerInCollision = collidingStaticId !== null;
+      // Sort left-to-right so cascade sweeps in one pass.
+      const sorted = [...annotations].sort(
+        (a, b) => a.truePercent - b.truePercent,
+      );
+
+      // displayPx tracks the resolved pixel center for each icon.
+      const displayPx: number[] = sorted.map((a) => (a.truePercent / 100) * containerWidth);
+
+      for (let i = 0; i < sorted.length; i++) {
+        let shifts = 0;
+
+        // Check against walker first (fixed point — never moves).
+        if (walkerPx !== null && Math.abs(displayPx[i] - walkerPx) < COLLISION_DETECT_PX) {
+          displayPx[i] = walkerPx + SIDE_BY_SIDE_GAP_PX;
+          shifts++;
+        }
+
+        // Check against already-resolved left neighbours (leftmost-stable).
+        for (let j = i - 1; j >= 0 && shifts < 2; j--) {
+          if (Math.abs(displayPx[i] - displayPx[j]) < COLLISION_DETECT_PX) {
+            displayPx[i] = displayPx[j] + SIDE_BY_SIDE_GAP_PX;
+            shifts++;
+          }
+        }
+      }
+
+      // Compact time-format detection: adjacent pair within 60px whose AM/PM period
+      // matches → strip suffix from both labels.
+      const compactSet = new Set<number>();
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const distPx = Math.abs(displayPx[i + 1] - displayPx[i]);
+        if (distPx < 60) {
+          const aTime = sorted[i].time;
+          const bTime = sorted[i + 1].time;
+          const aPeriod = aTime.slice(-2); // 'AM' or 'PM'
+          const bPeriod = bTime.slice(-2);
+          if (aPeriod === bPeriod) {
+            compactSet.add(i);
+            compactSet.add(i + 1);
+          }
+        }
+      }
+
+      // Re-map back to original annotation order for stable key rendering.
+      return annotations.map((a) => {
+        const si = sorted.findIndex((s) => s.id === a.id);
+        const px = displayPx[si];
+        return {
+          ...a,
+          displayPercent: (px / containerWidth) * 100,
+          compact: compactSet.has(si),
+        };
+      });
+    }, [annotations, containerWidth, walkerXPercent]);
 
   return (
     <div
@@ -208,47 +230,37 @@ export default function AnnotationStrip({ date }: Props) {
         zIndex: 10,
       }}
     >
-      {positions.map((a) => (
-        <AnnotationIcon
-          key={a.id}
-          Icon={a.Icon}
-          displayPercent={a.displayPercent}
-          color={a.color}
-          label={a.label}
-          time={a.time}
-          labelSide="right"
-          isHovered={hoveredId === a.id}
-          onHoverStart={() => setHoveredId(a.id)}
-          onHoverEnd={() => setHoveredId((prev) => (prev === a.id ? null : prev))}
-          zIndex={2}
-        />
-      ))}
+      {positions.map((a) => {
+        const displayTime = a.compact
+          ? a.id.startsWith('sunrise') || a.id.startsWith('sunset')
+            ? formatClockCompact(
+                a.id === 'sunrise'
+                  ? (dayWeather?.daily.sunrise ?? new Date())
+                  : (dayWeather?.daily.sunset ?? new Date()),
+              )
+            : formatHourClockCompact(parseInt(a.id.split('-')[1] ?? '0', 10))
+          : a.time;
 
-      {now && (
-        <AnnotationIcon
-          Icon={PersonStanding}
-          displayPercent={walkerPercent}
-          color="rgba(255,255,255,0.85)"
-          label="Now"
-          time={formatClock(now)}
-          labelSide={walkerInCollision ? 'left' : 'right'}
-          isHovered={hoveredId === 'walker'}
-          onHoverStart={() => setHoveredId('walker')}
-          onHoverEnd={() => setHoveredId((prev) => (prev === 'walker' ? null : prev))}
-          zIndex={3}
-        />
-      )}
+        return (
+          <AnnotationIcon
+            key={a.id}
+            Icon={a.Icon}
+            displayPercent={a.displayPercent}
+            color={a.color}
+            label={a.label}
+            time={displayTime}
+            isHovered={hoveredId === a.id}
+            onHoverStart={() => setHoveredId(a.id)}
+            onHoverEnd={() => setHoveredId((prev) => (prev === a.id ? null : prev))}
+            zIndex={2}
+          />
+        );
+      })}
       <WeatherSourceIndicator />
     </div>
   );
 }
 
-// Subtle indicator reflecting the weather data class for the active trip.
-// Three states:
-//   - forecast      → renders nothing (default, no clutter)
-//   - estimate      → BarChart3 + "estimate" label, climate-fallback
-//   - unavailable   → AlertCircle + "unavailable", both APIs failed OR
-//                     frontend fetch failed entirely
 function WeatherSourceIndicator() {
   const tripId = useTripStore((s) => s.tripPlan?.id ?? null);
   const { source, isUnavailable, isEstimate, isMockFallback } = useTripWeather(tripId);
@@ -298,7 +310,6 @@ interface IconProps {
   color: string;
   label: string;
   time: string;
-  labelSide: 'left' | 'right';
   isHovered: boolean;
   onHoverStart: () => void;
   onHoverEnd: () => void;
@@ -311,16 +322,18 @@ function AnnotationIcon({
   color,
   label,
   time,
-  labelSide,
   isHovered,
   onHoverStart,
   onHoverEnd,
   zIndex,
 }: IconProps) {
+  // Label centered below icon.
   const labelStyle: CSSProperties = {
     position: 'absolute',
-    top: '50%',
-    transform: 'translateY(-50%)',
+    top: '100%',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    marginTop: GAP,
     fontFamily: 'var(--font-sora)',
     fontSize: 10,
     lineHeight: 1,
@@ -329,9 +342,6 @@ function AnnotationIcon({
     color,
     whiteSpace: 'nowrap',
     pointerEvents: 'none',
-    ...(labelSide === 'left'
-      ? { right: '100%', marginRight: GAP }
-      : { left: '100%', marginLeft: GAP }),
   };
 
   return (

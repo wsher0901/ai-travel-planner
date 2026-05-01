@@ -15,8 +15,9 @@ import { TimeLabelsStrip } from '@/components/sky/TimeLabelsStrip';
 import AnnotationStrip from '@/components/layout/AnnotationStrip';
 import { type WeatherSegment } from '@/components/sky/types';
 import { getIsToday } from '@/lib/sunPosition';
+import { getCurrentMinuteInTimezone } from '@/components/sky/atmosphere/sunScenePos';
 import { inferScenery } from '@/lib/inferScenery';
-import type { SceneryPreset } from '@/components/sky/types';
+import type { SceneryPreset, WalkerPreset } from '@/components/sky/types';
 import { useUIStore } from '@/store/uiStore';
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
@@ -142,6 +143,27 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     () => (selectedDate ? getIsToday(selectedDate, TIMEZONE) : false),
     [selectedDate, TIMEZONE]
   );
+
+  // Single source of walker x-position — shared by SkyStrip (WalkerLayer) and
+  // AnnotationStrip (collision math). Avoids dual timers drifting independently.
+  const [walkerMinute, setWalkerMinute] = useState(() =>
+    isToday ? getCurrentMinuteInTimezone(TIMEZONE) : 0,
+  );
+  useEffect(() => {
+    if (!isToday) {
+      setWalkerMinute(0);
+      return;
+    }
+    setWalkerMinute(getCurrentMinuteInTimezone(TIMEZONE));
+    const id = setInterval(
+      () => setWalkerMinute(getCurrentMinuteInTimezone(TIMEZONE)),
+      60_000,
+    );
+    return () => clearInterval(id);
+  }, [isToday, TIMEZONE]);
+  const walkerXPercent = isToday ? (walkerMinute / 1440) * 100 : null;
+
+  const walker: WalkerPreset = 'person';
 
   const tripStartDate = tripPlan?.start_date;
   const tripEndDate = tripPlan?.end_date;
@@ -560,6 +582,8 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                       lng={LNG}
                       timezone={TIMEZONE}
                       scenery={scenery}
+                      walker={walker}
+                      walkerXPercent={slotDate === selectedDate ? walkerXPercent : null}
                       weatherSegments={getWeatherForDate(slotDate)}
                       isToday={isToday && slotDate === selectedDate}
                       aspectScale={aspectScale}
@@ -567,14 +591,14 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                   )}
                 </div>
 
-                {/* Layer 2 — Time labels (7%) */}
-                <div style={{ flex: '7 1 0', minHeight: 0, position: 'relative' }}>
+                {/* Layer 2 — Time labels (5%) */}
+                <div style={{ flex: '5 1 0', minHeight: 0, position: 'relative' }}>
                   <TimeLabelsStrip />
                 </div>
 
-                {/* Layer 3 — Annotations (matches Layer 2 height) */}
-                <div style={{ flex: '7 1 0', minHeight: 0, position: 'relative', zIndex: 10 }}>
-                  <AnnotationStrip date={slotDate} />
+                {/* Layer 3 — Annotations (10%) */}
+                <div style={{ flex: '10 1 0', minHeight: 0, position: 'relative', zIndex: 10, overflow: 'visible' }}>
+                  <AnnotationStrip date={slotDate} walkerXPercent={walkerXPercent} />
                 </div>
 
                 {/* Layer 4 — Pills (15%) */}

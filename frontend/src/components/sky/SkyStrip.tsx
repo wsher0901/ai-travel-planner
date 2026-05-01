@@ -25,6 +25,8 @@ export default function SkyStrip({
   date, lat, lng,
   timezone = 'UTC',
   scenery = 'mountainscape',
+  walker = 'person',
+  walkerXPercent = null,
   weatherSegments = [],
   palette: paletteProp,
   isToday = false,
@@ -165,7 +167,11 @@ export default function SkyStrip({
         <Scenery preset={scenery} />
 
         {/* Layer 3: atmosphere — modulates the whole scene */}
-        <WeatherLayer sunPositionPct={sunPositionPct} />
+        <WeatherLayer
+          sunPositionPct={sunPositionPct}
+          walkerXPercent={walkerXPercent}
+          walkerPreset={walker}
+        />
 
         {/* Dev-only weather cycler (gated to non-prod inside the component) */}
         <WeatherDevCycler weather={cyclerOverride} onChange={setCyclerOverride} />
