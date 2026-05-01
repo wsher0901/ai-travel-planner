@@ -42,6 +42,11 @@ export const DEFAULT_MOCK_WEATHER: MockWeather = {
 // dev-cycler atmospheres run through the same getHourlyAtmosphere pipeline
 // as real data. Visibility is intentionally large for non-fog conditions
 // so the visibility override in mapping.ts doesn't kick in.
+//
+// NOTE: The cycler enumerates AtmosphereCondition (7 values), not WeatherCondition.
+// 'cloudy' → WMO code 3 → conditionTier 'overcast' (post-3B split). Neither
+// 'partly-cloudy' nor 'snow' conditionTier is reachable via the cycler.
+// Prompt 4/5 will revisit if dev coverage of those tiers is needed.
 function hourlyFromMock(m: MockWeather, hourFloat: number): HourlyWeather {
   const make = (
     code: number,

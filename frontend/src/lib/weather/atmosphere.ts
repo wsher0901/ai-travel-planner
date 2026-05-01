@@ -24,6 +24,7 @@ interface TierConfig {
 
 // Per-(tier, precipitation) atmosphere config. Mirrors 2A's CONDITION_CONFIG
 // values for the rain ladder so visuals stay consistent on real data.
+// partly-cloudy / overcast are provisional — visual tuning in Prompt 4/5.
 function getTierConfig(
   tier: WeatherCondition,
   precip: PrecipitationIntensity,
@@ -31,8 +32,10 @@ function getTierConfig(
   switch (tier) {
     case 'sunny':
       return { tint: [255, 220, 140, 0.04], dimming: 0,    intensity: 0    };
-    case 'cloudy':
-      return { tint: [180, 195, 215, 0.10], dimming: 0.08, intensity: 0.35 };
+    case 'partly-cloudy':
+      return { tint: [180, 195, 215, 0.06], dimming: 0.04, intensity: 0.20 };
+    case 'overcast':
+      return { tint: [170, 185, 205, 0.14], dimming: 0.12, intensity: 0.45 };
     case 'fog':
       return { tint: [200, 205, 215, 0.18], dimming: 0.12, intensity: 0.55 };
     case 'rain':
@@ -45,6 +48,10 @@ function getTierConfig(
       if (precip === 'light')    return { tint: [220, 225, 245, 0.10], dimming: 0.08, intensity: 0.30 };
       if (precip === 'moderate') return { tint: [220, 225, 245, 0.16], dimming: 0.14, intensity: 0.55 };
       return                            { tint: [225, 230, 250, 0.22], dimming: 0.20, intensity: 0.80 };
+    default: {
+      const _exhaustive: never = tier;
+      throw new Error(`Unhandled WeatherCondition in getTierConfig: ${_exhaustive}`);
+    }
   }
 }
 
@@ -61,8 +68,12 @@ function computeSunMood(
 ): SunMood {
   if (tier === 'storm') return 'hidden';
   if (tier === 'rain' || tier === 'fog' || tier === 'snow') return 'muted';
-  if (tier === 'cloudy') return goldenHourActive ? 'warm' : 'muted';
-  return goldenHourActive ? 'warm' : 'normal';
+  // Heavy cloud cover dims the sun even without precipitation.
+  if (tier === 'overcast') return goldenHourActive ? 'warm' : 'muted';
+  // 'sunny' and 'partly-cloudy' get full golden-hour warmth when near sunrise/sunset.
+  if (tier === 'sunny' || tier === 'partly-cloudy') return goldenHourActive ? 'warm' : 'normal';
+  const _exhaustive: never = tier;
+  throw new Error(`Unhandled WeatherCondition in computeSunMood: ${_exhaustive}`);
 }
 
 // Pure: single hourly snapshot → SceneAtmosphere.
@@ -88,8 +99,10 @@ export function getHourlyAtmosphere(
     minutesFromSunrise <= GOLDEN_HOUR_WINDOW_MIN ||
     minutesFromSunset <= GOLDEN_HOUR_WINDOW_MIN;
 
-  // Weather suppresses golden hour (per 2A): only 'sunny'/'cloudy' qualify.
-  const goldenHourActive = nearGolden && (tier === 'sunny' || tier === 'cloudy');
+  // All clear-sky tiers qualify for golden-hour warming; precipitation and fog suppress it.
+  const goldenHourActive = nearGolden && (
+    tier === 'sunny' || tier === 'partly-cloudy' || tier === 'overcast'
+  );
 
   let r = r0, g = g0, b = b0;
   if (goldenHourActive) {
@@ -112,6 +125,7 @@ export function getHourlyAtmosphere(
     intensity: cfg.intensity,
     fogDensityMultiplier,
     condition: deriveAtmosphereCondition(tier, precip),
+    windy: h.windSpeedMps >= 7,
   };
 }
 
@@ -261,6 +275,7 @@ export function getAtmosphereAtTime(
     intensity: lerp(aLow.intensity, aHigh.intensity, factor),
     fogDensityMultiplier: lerp(aLow.fogDensityMultiplier, aHigh.fogDensityMultiplier, factor),
     condition: aLow.condition,
+    windy: aLow.windy,
   };
 }
 

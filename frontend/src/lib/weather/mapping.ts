@@ -7,18 +7,23 @@ import type {
 
 // WMO weather_code → conditionTier with a visibility override for fog.
 // Reference: https://open-meteo.com/en/docs (weather_code section)
+//
+// Cloudy-family split:
+//   0 = clear sky         → 'sunny' (<60% cloud) or 'partly-cloudy' (≥60%)
+//   1 = mainly clear      → 'sunny' (<60% cloud) or 'partly-cloudy' (≥60%)
+//   2 = partly cloudy     → 'partly-cloudy' (<80%) or 'overcast' (≥80%)
+//   3 = overcast          → 'overcast' (always)
+// Fallback is 'partly-cloudy' (chosen as the most neutral middle-ground).
 export function mapToConditionTier(h: HourlyWeather): WeatherCondition {
   // Visibility-driven fog override — heavy fog can occur with code 0/1.
   if (h.visibilityM < 4000) return 'fog';
 
   const code = h.weatherCode;
 
-  // 0 = clear, 1 = mainly clear → cloud-cover settles tier.
-  if (code === 0 || code === 1) {
-    return h.cloudCover > 50 ? 'cloudy' : 'sunny';
-  }
-  // 2 = partly cloudy, 3 = overcast.
-  if (code === 2 || code === 3) return 'cloudy';
+  if (code === 0) return h.cloudCover < 60 ? 'sunny' : 'partly-cloudy';
+  if (code === 1) return h.cloudCover < 60 ? 'sunny' : 'partly-cloudy';
+  if (code === 2) return h.cloudCover < 80 ? 'partly-cloudy' : 'overcast';
+  if (code === 3) return 'overcast';
   // 45, 48 = fog / depositing rime fog.
   if (code === 45 || code === 48) return 'fog';
   // 71-77 = snow fall, 85-86 = snow showers.
@@ -28,7 +33,7 @@ export function mapToConditionTier(h: HourlyWeather): WeatherCondition {
   // 51-67 = drizzle/rain (incl. freezing), 80-82 = rain showers.
   if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
 
-  return 'cloudy';
+  return 'partly-cloudy';
 }
 
 export function mapPrecipIntensity(
@@ -64,22 +69,27 @@ export function mapFogDensity(visibilityM: number): number {
 }
 
 // Back-compat: derive AtmosphereCondition (the 7-value union 2A/2C consume)
-// from (tier, precipitationIntensity). Snow falls back to 'cloudy' since
-// no snow visuals exist yet.
+// from (tier, precipitationIntensity). Both new cloudy-family tiers map to
+// 'cloudy'; snow falls back to 'cloudy' (no snow visuals yet in 2A/2C).
 export function deriveAtmosphereCondition(
   tier: WeatherCondition,
   precip: PrecipitationIntensity,
 ): AtmosphereCondition {
   switch (tier) {
-    case 'sunny':  return 'sunny';
-    case 'cloudy': return 'cloudy';
-    case 'fog':    return 'foggy';
-    case 'storm':  return 'thunderstorm';
+    case 'sunny':         return 'sunny';
+    case 'partly-cloudy': return 'cloudy';
+    case 'overcast':      return 'cloudy';
+    case 'fog':           return 'foggy';
+    case 'storm':         return 'thunderstorm';
     case 'rain':
       if (precip === 'light')    return 'light_rain';
       if (precip === 'moderate') return 'moderate_rain';
       return 'heavy_rain';
     case 'snow':
       return 'cloudy';
+    default: {
+      const _exhaustive: never = tier;
+      throw new Error(`Unhandled WeatherCondition in deriveAtmosphereCondition: ${_exhaustive}`);
+    }
   }
 }

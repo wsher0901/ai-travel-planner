@@ -1,8 +1,9 @@
-// New 6-tier union — adds 'sunny' (replaces 2A's 'clear') and 'snow'.
-// 2A's `ConditionTier` was a 5-value subset; this is the canonical type going forward.
+// 7-tier union. 'cloudy' is split into 'partly-cloudy' (code 0-2, low cloud)
+// and 'overcast' (code 2-3, high cloud cover). All others unchanged from 3A.
 export type WeatherCondition =
   | 'sunny'
-  | 'cloudy'
+  | 'partly-cloudy'
+  | 'overcast'
   | 'fog'
   | 'rain'
   | 'storm'
@@ -77,6 +78,9 @@ export interface SceneAtmosphere {
   fogDensityMultiplier: number;
   // Back-compat for 2A/2C — derived, not authoritative.
   condition: AtmosphereCondition;
+  // True when windSpeedMps >= 7 at sample time. Consumed by visual layers
+  // for turbulence effects; not blended across hours (discrete).
+  windy: boolean;
 }
 
 // Backend wire format. Hourly is identical; daily.sunrise/sunset arrive as
