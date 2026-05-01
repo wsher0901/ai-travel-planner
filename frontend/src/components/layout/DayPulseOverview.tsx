@@ -598,7 +598,10 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
 
                 {/* Layer 3 — Annotations (10%) */}
                 <div style={{ flex: '10 1 0', minHeight: 0, position: 'relative', zIndex: 10, overflow: 'visible' }}>
-                  <AnnotationStrip date={slotDate} walkerXPercent={walkerXPercent} />
+                  <AnnotationStrip
+                    date={slotDate}
+                    walkerXPercent={slotDate === selectedDate ? walkerXPercent : null}
+                  />
                 </div>
 
                 {/* Layer 4 — Pills (15%) */}

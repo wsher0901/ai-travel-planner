@@ -177,16 +177,22 @@ export default function AnnotationStrip({ date, walkerXPercent }: Props) {
         let shifts = 0;
 
         // Check against walker first (fixed point — never moves).
+        // Yield away from walker: left icon goes left, right icon goes right.
         if (walkerPx !== null && Math.abs(displayPx[i] - walkerPx) < COLLISION_DETECT_PX) {
-          displayPx[i] = walkerPx + SIDE_BY_SIDE_GAP_PX;
+          displayPx[i] =
+            displayPx[i] < walkerPx
+              ? walkerPx - SIDE_BY_SIDE_GAP_PX
+              : walkerPx + SIDE_BY_SIDE_GAP_PX;
           shifts++;
         }
 
         // Check against already-resolved left neighbours (leftmost-stable).
+        // Break after each successful shift — one nudge per pass, no double-counting.
         for (let j = i - 1; j >= 0 && shifts < 2; j--) {
           if (Math.abs(displayPx[i] - displayPx[j]) < COLLISION_DETECT_PX) {
             displayPx[i] = displayPx[j] + SIDE_BY_SIDE_GAP_PX;
             shifts++;
+            break;
           }
         }
       }
