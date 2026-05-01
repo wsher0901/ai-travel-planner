@@ -1,4 +1,5 @@
 import type { SunTimes } from '@/lib/sunPosition';
+import { TIMELINE_INSET_PCT } from '@/lib/timelineInset';
 
 // Mirrors the bezier arc geometry used by CelestialBodies.tsx so the
 // SunnyGlow center lines up with the rendered sun disc. Constants must
@@ -7,6 +8,10 @@ const ARC_HORIZON_Y = 215;
 const ARC_APEX_Y = -90;
 const VIEWBOX_W = 1000;
 const VIEWBOX_H = 200;
+
+function minuteToInsetViewboxX(minute: number): number {
+  return (TIMELINE_INSET_PCT / 100 + (minute / 1440) * (1 - 2 * TIMELINE_INSET_PCT / 100)) * VIEWBOX_W;
+}
 
 function bezierYatX(
   x0: number, ctrlX: number, x1: number,
@@ -49,10 +54,10 @@ export function getSunScenePctAtMinute(
 
   if (minute < sunriseMin || minute > sunsetMin) return null;
 
-  const x0 = (sunriseMin / 1440) * VIEWBOX_W;
-  const x1 = (sunsetMin / 1440) * VIEWBOX_W;
-  const cx = (solarNoonMin / 1440) * VIEWBOX_W;
-  const targetX = (minute / 1440) * VIEWBOX_W;
+  const x0 = minuteToInsetViewboxX(sunriseMin);
+  const x1 = minuteToInsetViewboxX(sunsetMin);
+  const cx = minuteToInsetViewboxX(solarNoonMin);
+  const targetX = minuteToInsetViewboxX(minute);
 
   const y = bezierYatX(x0, cx, x1, ARC_HORIZON_Y, ARC_APEX_Y, ARC_HORIZON_Y, targetX);
   if (y === null) return null;

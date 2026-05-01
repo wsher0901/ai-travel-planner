@@ -1,15 +1,16 @@
 import { CSSProperties } from 'react'
+import { hourToTimelinePercent } from '@/lib/timelineInset'
 
 const LABELS = [
-  { pct: 0,    text: '12 AM', anchor: 'start'  as const },
-  { pct: 12.5, text: '3 AM',  anchor: 'center' as const },
-  { pct: 25,   text: '6 AM',  anchor: 'center' as const },
-  { pct: 37.5, text: '9 AM',  anchor: 'center' as const },
-  { pct: 50,   text: 'NOON',  anchor: 'center' as const },
-  { pct: 62.5, text: '3 PM',  anchor: 'center' as const },
-  { pct: 75,   text: '6 PM',  anchor: 'center' as const },
-  { pct: 87.5, text: '9 PM',  anchor: 'center' as const },
-  { pct: 100,  text: '12 AM', anchor: 'end'    as const },
+  { hour: 0,  text: '12 AM' },
+  { hour: 3,  text: '3 AM'  },
+  { hour: 6,  text: '6 AM'  },
+  { hour: 9,  text: '9 AM'  },
+  { hour: 12, text: 'NOON'  },
+  { hour: 15, text: '3 PM'  },
+  { hour: 18, text: '6 PM'  },
+  { hour: 21, text: '9 PM'  },
+  { hour: 24, text: '12 AM' },
 ]
 
 const containerStyle: CSSProperties = {
@@ -31,19 +32,16 @@ const baseLabel: CSSProperties = {
   whiteSpace: 'nowrap',
   pointerEvents: 'none',
   letterSpacing: '0.02em',
-}
-
-function labelStyle(pct: number, anchor: 'start' | 'center' | 'end'): CSSProperties {
-  if (anchor === 'start') return { ...baseLabel, left: '8px',  transform: 'translateY(-50%)' }
-  if (anchor === 'end')   return { ...baseLabel, right: '8px', transform: 'translateY(-50%)' }
-  return { ...baseLabel, left: `${pct}%`, transform: 'translate(-50%, -50%)' }
+  transform: 'translate(-50%, -50%)',
 }
 
 export function TimeLabelsStrip() {
   return (
     <div style={containerStyle} aria-hidden>
       {LABELS.map((l, i) => (
-        <span key={i} style={labelStyle(l.pct, l.anchor)}>{l.text}</span>
+        <span key={i} style={{ ...baseLabel, left: `${hourToTimelinePercent(l.hour)}%` }}>
+          {l.text}
+        </span>
       ))}
     </div>
   )

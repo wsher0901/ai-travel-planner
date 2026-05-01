@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, useEffect, useRef, useId } from 'react';
+import { TIMELINE_INSET_PCT } from '@/lib/timelineInset';
 import {
   type SunTimes,
   getHourlySolarElevation,
@@ -20,6 +21,10 @@ interface Props {
 const HALF_PI = Math.PI / 2;
 const ARC_HORIZON_Y = 215;
 const ARC_APEX_Y    = -90;
+
+function minuteToInsetViewboxX(minute: number): number {
+  return (TIMELINE_INSET_PCT / 100 + (minute / 1440) * (1 - 2 * TIMELINE_INSET_PCT / 100)) * 1000;
+}
 
 function interpolatePos(
   samples: { hour: number; altitude: number }[],
@@ -93,9 +98,9 @@ export default function CelestialBodies({
       return { arcPath: null, noonX: null, noonY: null, noonAltitude: -1 };
     }
 
-    const x0   = (riseMin / 1440) * 1000;
-    const x1   = (setMin  / 1440) * 1000;
-    const cx   = (nMin    / 1440) * 1000;
+    const x0   = minuteToInsetViewboxX(riseMin);
+    const x1   = minuteToInsetViewboxX(setMin);
+    const cx   = minuteToInsetViewboxX(nMin);
     const path = `M ${x0.toFixed(1)} ${ARC_HORIZON_Y} Q ${cx.toFixed(1)} ${ARC_APEX_Y} ${x1.toFixed(1)} ${ARC_HORIZON_Y}`;
 
     // Noon y from the Bezier so the sun disc sits on the arc
@@ -122,7 +127,7 @@ export default function CelestialBodies({
   const shadowDx   = Math.cos(phaseAngle) * 7;
   const shadowR    = 7;
 
-  const moonX = moonMinute !== null ? (moonMinute / 1440) * 1000 : null;
+  const moonX = moonMinute !== null ? minuteToInsetViewboxX(moonMinute) : null;
   const moonY = (!isNewMoon && moonData !== null && moonData.altitude > 0)
     ? Math.max(20, 100 - (moonData.altitude / HALF_PI) * 80)
     : null;
@@ -146,7 +151,8 @@ export default function CelestialBodies({
       const g = liveRef.current;
       if (!g) return;
       const minute  = getCurrentMinuteInTimezone(timezone);
-      const { x, y, altitude } = interpolatePos(hourlyElevations, minute);
+      const { y, altitude } = interpolatePos(hourlyElevations, minute);
+      const x = minuteToInsetViewboxX(minute);
       if (altitude < 0) { g.style.display = 'none'; return; }
       g.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
       if (firstRun) {
@@ -178,7 +184,7 @@ export default function CelestialBodies({
       const minute  = getCurrentMinuteInTimezone(timezone);
       const pos     = getMoonPositionAtMinute(date, minute, lat, lng, timezone);
       if (pos.altitude <= 0) { g.style.display = 'none'; return; }
-      const x = (minute / 1440) * 1000;
+      const x = minuteToInsetViewboxX(minute);
       const y = Math.max(20, 100 - (pos.altitude / HALF_PI) * 80);
       const sunAlt = interpolatePos(hourlyElevations, minute).altitude;
       const targetOpacity = sunAlt < 0 ? '1' : String(Math.max(0.3, 1 - (sunAlt / HALF_PI) * 0.7).toFixed(2));

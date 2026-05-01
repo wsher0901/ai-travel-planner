@@ -19,6 +19,7 @@ import { getCurrentMinuteInTimezone } from '@/components/sky/atmosphere/sunScene
 import { inferScenery } from '@/lib/inferScenery';
 import type { SceneryPreset, WalkerPreset } from '@/components/sky/types';
 import { useUIStore } from '@/store/uiStore';
+import { minuteToTimelinePercent, TIMELINE_INSET_PCT } from '@/lib/timelineInset';
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
   transport: Plane,
@@ -161,7 +162,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     );
     return () => clearInterval(id);
   }, [isToday, TIMEZONE]);
-  const walkerXPercent = isToday ? (walkerMinute / 1440) * 100 : null;
+  const walkerXPercent = isToday ? minuteToTimelinePercent(walkerMinute) : null;
 
   const walker: WalkerPreset = 'person';
 
@@ -302,7 +303,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     const parts = fmt.formatToParts(new Date());
     const h = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10) % 24;
     const m = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
-    return ((h * 60 + m) / DAY_MINUTES) * 100;
+    return minuteToTimelinePercent(h * 60 + m);
   }, [selectedDate, TIMEZONE]);
 
   const renderPillsForDay = useCallback((date: string) => {
@@ -315,8 +316,8 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
           const durMin = item.end_time
             ? timeToMin(item.end_time) - startMin
             : item.duration_minutes ?? 60;
-          const left = (startMin / DAY_MINUTES) * 100;
-          const width = Math.max((durMin / DAY_MINUTES) * 100, 2);
+          const left = minuteToTimelinePercent(startMin);
+          const width = Math.max((durMin / DAY_MINUTES) * (100 - 2 * TIMELINE_INSET_PCT), 2);
           const color = getActivityColor(item.activity_type);
           const Icon = TYPE_ICONS[item.activity_type ?? 'sightseeing'] ?? Landmark;
           const isTiny = durMin < 30;

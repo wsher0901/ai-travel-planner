@@ -12,6 +12,7 @@ import {
   type LucideProps,
 } from 'lucide-react';
 import { DAY_MINUTES } from '@/lib/timeAxis';
+import { hourToTimelinePercent, minuteToTimelinePercent } from '@/lib/timelineInset';
 import { useTripStore } from '@/store/tripStore';
 import { useTripWeather } from '@/hooks/useTripWeather';
 import { mapToConditionTier } from '@/lib/weather/mapping';
@@ -66,7 +67,7 @@ function formatHourClockCompact(hour: number): string {
 }
 
 function dateMinuteToPercent(d: Date): number {
-  return ((d.getHours() * 60 + d.getMinutes()) / DAY_MINUTES) * 100;
+  return minuteToTimelinePercent(d.getHours() * 60 + d.getMinutes());
 }
 
 interface PrecipTransition {
@@ -146,7 +147,7 @@ export default function AnnotationStrip({ date, walkerXPercent }: Props) {
         color: t.mode === 'snow' ? SNOW_COLOR : RAIN_COLOR,
         label: t.mode === 'snow' ? 'Snow begins' : 'Rain begins',
         time: formatHourClock(t.hour),
-        truePercent: (t.hour / 24) * 100,
+        truePercent: hourToTimelinePercent(t.hour),
       });
     }
     return out;

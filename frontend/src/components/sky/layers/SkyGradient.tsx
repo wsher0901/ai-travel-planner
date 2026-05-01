@@ -1,6 +1,7 @@
 'use client';
 import { useMemo } from 'react';
 import { type SunTimes } from '@/lib/sunPosition';
+import { minuteToTimelinePercent } from '@/lib/timelineInset';
 
 interface Props { sunTimes: SunTimes; }
 
@@ -14,13 +15,13 @@ function c(v: number): number {
 
 export default function SkyGradient({ sunTimes }: Props) {
   const gradient = useMemo(() => {
-    const nightEndPct = c(safeMin(sunTimes.astronomicalDawnMin, 330) / 1440 * 100);
-    const dawnPct     = c(safeMin(sunTimes.dawnMin,             360) / 1440 * 100);
-    const sunrisePct  = c(safeMin(sunTimes.sunriseMin,          390) / 1440 * 100);
-    const noonPct     = c(safeMin(sunTimes.solarNoonMin,        720) / 1440 * 100);
-    const sunsetPct   = c(safeMin(sunTimes.sunsetMin,          1050) / 1440 * 100);
-    const duskPct     = c(safeMin(sunTimes.duskMin,            1080) / 1440 * 100);
-    const nightPct    = c(safeMin(sunTimes.astronomicalDuskMin, 1110) / 1440 * 100);
+    const nightEndPct = c(minuteToTimelinePercent(safeMin(sunTimes.astronomicalDawnMin, 330)));
+    const dawnPct     = c(minuteToTimelinePercent(safeMin(sunTimes.dawnMin,             360)));
+    const sunrisePct  = c(minuteToTimelinePercent(safeMin(sunTimes.sunriseMin,          390)));
+    const noonPct     = c(minuteToTimelinePercent(safeMin(sunTimes.solarNoonMin,        720)));
+    const sunsetPct   = c(minuteToTimelinePercent(safeMin(sunTimes.sunsetMin,          1050)));
+    const duskPct     = c(minuteToTimelinePercent(safeMin(sunTimes.duskMin,            1080)));
+    const nightPct    = c(minuteToTimelinePercent(safeMin(sunTimes.astronomicalDuskMin, 1110)));
 
     const stops: Array<[number, string]> = [
       [0,                       '#0b1220'],
