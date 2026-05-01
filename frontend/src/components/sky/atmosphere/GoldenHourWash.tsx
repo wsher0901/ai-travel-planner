@@ -4,13 +4,6 @@ import { motion } from 'framer-motion';
 import { useSceneWeather } from './SceneAtmosphere';
 import { sampleIndexToPercent } from '@/lib/weather/spatial';
 
-interface Props {
-  // Kept for prop-shape compatibility; horizontal mapping makes the
-  // sunrise-vs-sunset side bias emerge naturally from where the
-  // golden-hour stops fall along the strip.
-  sunPositionPct: { x: number; y: number };
-}
-
 const ACTIVE_ALPHA = 0.10;
 const WARM_R = 255;
 const WARM_G = 175;
@@ -20,7 +13,7 @@ const WARM_B = 110;
 // else 0. CSS gradient interpolation between adjacent stops naturally
 // feathers the active window edges, since stops are at 30-min intervals
 // and golden-hour spans ~90 min — neighbour samples ramp 0→active→0.
-export default function GoldenHourWash(_props: Props) {
+export default function GoldenHourWash() {
   const { samples48 } = useSceneWeather();
 
   const gradient = useMemo(() => {
