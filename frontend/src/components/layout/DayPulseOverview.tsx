@@ -316,8 +316,11 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
           const durMin = item.end_time
             ? timeToMin(item.end_time) - startMin
             : item.duration_minutes ?? 60;
-          const left = minuteToTimelinePercent(startMin);
-          const width = Math.max((durMin / DAY_MINUTES) * (100 - 2 * TIMELINE_INSET_PCT), 2);
+          const fullWidth = (durMin / DAY_MINUTES) * (100 - 2 * TIMELINE_INSET_PCT);
+          const compressedWidth = fullWidth * 0.9;
+          const slotCenterPct = minuteToTimelinePercent(startMin) + fullWidth * 0.5;
+          const left = slotCenterPct - compressedWidth * 0.5;
+          const width = Math.max(compressedWidth, 2);
           const color = getActivityColor(item.activity_type);
           const Icon = TYPE_ICONS[item.activity_type ?? 'sightseeing'] ?? Landmark;
           const isTiny = durMin < 30;
@@ -364,7 +367,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
             const tinyStyle: React.CSSProperties = {
               position: 'absolute',
               top: '50%',
-              left: `${left}%`,
+              left: `${slotCenterPct}%`,
               width: isActive ? 18 : 12,
               height: isActive ? 18 : 12,
               borderRadius: '50%',

@@ -1,4 +1,4 @@
-export const TIMELINE_INSET_PCT = 2;
+export const TIMELINE_INSET_PCT = 5;
 
 export function hourToTimelinePercent(hourFloat: number): number {
   const usable = 100 - 2 * TIMELINE_INSET_PCT;
