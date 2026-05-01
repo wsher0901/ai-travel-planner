@@ -22,7 +22,7 @@ export interface WeatherSegment {
   cloudCover: number;  // 0-100
 }
 
-export type SceneryPreset = 'cityscape' | 'oceanscape' | 'mountainscape' | 'forestscape' | 'plains';
+export type SceneryPreset = 'cityscape' | 'beachscape' | 'mountainscape' | 'desertscape' | 'forestscape';
 
 export interface SkyStripProps {
   date: string;
