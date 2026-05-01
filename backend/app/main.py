@@ -11,6 +11,7 @@ from app.limiter import limiter
 from app.models.responses import HealthResponse
 from app.routers.chat import router as chat_router
 from app.routers.plan import router as plan_router
+from app.routers.weather import router as weather_router
 
 logger = logging.getLogger("roam.main")
 logging.basicConfig(
@@ -46,6 +47,7 @@ app.add_middleware(
 
 app.include_router(chat_router)
 app.include_router(plan_router)
+app.include_router(weather_router)
 
 
 @app.on_event("startup")

@@ -12,6 +12,7 @@ import { type PlanItem, useTripStore } from '@/store/tripStore';
 import { getActivityColor } from '@/lib/activityColors';
 import SkyStrip from '@/components/sky/SkyStrip';
 import { TimeLabelsStrip } from '@/components/sky/TimeLabelsStrip';
+import AnnotationStrip from '@/components/layout/AnnotationStrip';
 import { type WeatherSegment } from '@/components/sky/types';
 import { getIsToday } from '@/lib/sunPosition';
 import { inferScenery } from '@/lib/inferScenery';
@@ -571,13 +572,9 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                   <TimeLabelsStrip />
                 </div>
 
-                {/* Layer 3 — Annotation placeholder (8%) */}
-                <div style={{ flex: '8 1 0', minHeight: 0, position: 'relative' }}>
-                  <div style={{
-                    width: '100%', height: '100%',
-                    borderTop: '0.5px dashed rgba(6, 182, 212, 0.1)',
-                    background: 'rgba(6, 182, 212, 0.02)',
-                  }} />
+                {/* Layer 3 — Annotations (matches Layer 2 height) */}
+                <div style={{ flex: '7 1 0', minHeight: 0, position: 'relative', zIndex: 10 }}>
+                  <AnnotationStrip date={slotDate} />
                 </div>
 
                 {/* Layer 4 — Pills (15%) */}
