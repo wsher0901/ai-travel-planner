@@ -44,7 +44,7 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
         style={{
           position: 'relative',
           transformOrigin: 'center bottom',
-          animation: 'travelerBob 1.4s ease-in-out infinite',
+          animation: 'travelerSway 1.4s ease-in-out infinite',
           filter: 'drop-shadow(0 0 5px rgba(245,158,11,0.65))',
         }}
       >
