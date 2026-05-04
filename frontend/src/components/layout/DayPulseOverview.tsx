@@ -637,7 +637,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                         top: '50%',
                         left: `${slotNowPercent}%`,
                         transformOrigin: 'center bottom',
-                        animation: 'travelerSway 1.4s ease-in-out infinite',
+                        animation: 'travelerSway 1s ease-in-out infinite',
                         filter: 'drop-shadow(0 0 6px rgba(245,158,11,0.75))',
                         pointerEvents: 'none',
                         zIndex: 6,

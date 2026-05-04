@@ -18,50 +18,51 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
       aria-hidden
       style={{
         position: 'absolute',
-        top: '50%',
+        bottom: 0,
         left: `${xPercent}%`,
-        transform: 'translate(-50%, -50%)',
+        transform: 'translateX(-50%)',
+        width: 44,
+        height: 44,
         pointerEvents: 'none',
-        zIndex: 0, // stacking within WeatherLayer managed by DOM order
+        zIndex: 0,
       }}
     >
-      {/* Pulsing ambient ring */}
+      {/* Pulsing ambient ring — behind silhouette via zIndex */}
       <div
         style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
-          width: 26,
-          height: 26,
+          width: 44,
+          height: 44,
           borderRadius: '50%',
-          transform: 'translate(-50%, -50%)',
           background: 'radial-gradient(circle, rgba(245,158,11,0.28) 0%, transparent 70%)',
           animation: 'travelerRingPulse 2s ease-in-out infinite',
+          zIndex: 0,
         }}
       />
-      {/* Silhouette with bob */}
+      {/* Side-view walking silhouette */}
       <div
         style={{
-          position: 'relative',
-          transformOrigin: 'center bottom',
-          animation: 'travelerSway 1.4s ease-in-out infinite',
-          filter: 'drop-shadow(0 0 5px rgba(245,158,11,0.65))',
+          position: 'absolute',
+          bottom: 0,
+          left: '50%',
+          marginLeft: -9,
+          zIndex: 1,
+          animation: 'travelerSway 1s ease-in-out infinite',
+          filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))',
         }}
       >
         <svg
           width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="rgba(255,255,255,0.75)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          height="36"
+          viewBox="0 0 18 36"
+          fill="rgba(255,255,255,0.78)"
         >
-          <circle cx="12" cy="5" r="2.5" />
-          <path d="M9 22l1-7 2-3 2 3 1 7" />
-          <path d="M10 15l-3-3" />
-          <path d="M14 15l3-4" />
+          {/* Head */}
+          <circle cx="11" cy="4" r="3.5" />
+          {/* Body: torso, front arm (forward), front leg, back leg, back arm (backward) */}
+          <path d="M13.5,8 L15.5,13 L14,14.5 L12.5,12 L13.5,20 L15.5,27 L17,35 L15,36 L13.5,35 L12.5,27 L10.5,22 L8.5,27 L7,34 L5,34 L6.5,27 L7.5,20 L7,14 L5.5,17.5 L7,18.5 L7.5,13.5 L8,8 Z" />
         </svg>
       </div>
     </div>
