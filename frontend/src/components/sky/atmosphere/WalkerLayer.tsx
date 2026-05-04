@@ -13,18 +13,24 @@ interface Props {
 export default function WalkerLayer({ xPercent, preset }: Props) {
   if (xPercent === null || preset === 'none') return null;
 
-  // Shared SVG props — three poses stack absolutely inside a 18×36 wrapper.
-  // Motion is purely opacity crossfade via walkerPoseA/B/C keyframes; no translateX
-  // or translateY anywhere in the walker render path.
-  const poseSvgStyle = (animName: string) => ({
-    position: 'absolute' as const,
-    bottom: 0,
-    left: 0,
-    animation: `${animName} 1.2s linear infinite`,
-  });
+  // Fixed figure geometry — do NOT recompute analytically.
+  // ViewBox 0 0 36 36. Head at (18,5) r=4. Shoulder (18,9). Hip (18,22).
+  const S = 'rgba(255,255,255,0.78)';
 
-  // Head is identical across all poses.
-  const head = <circle cx="10" cy="4" r="3" />;
+  // Line helper — all limbs share these stroke attributes.
+  const L = (x1: number, y1: number, x2: number, y2: number) => (
+    <line
+      x1={x1} y1={y1} x2={x2} y2={y2}
+      stroke={S} strokeWidth={1.4} strokeLinecap="round"
+    />
+  );
+
+  const Head  = <circle cx={18} cy={5} r={4} fill={S} />;
+  const Torso = L(18, 9, 18, 22);
+
+  const poseAnim = (name: string) => ({
+    animation: `${name} 1.4s linear infinite`,
+  });
 
   return (
     <div
@@ -34,8 +40,8 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
         bottom: 0,
         left: `${xPercent}%`,
         transform: 'translateX(-50%)',
-        width: 44,
-        height: 44,
+        width: 36,
+        height: 36,
         pointerEvents: 'none',
         zIndex: 0,
       }}
@@ -57,57 +63,54 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
         }}
       />
 
-      {/* Three-pose walking cycle. Poses crossfade A→B→C via opacity keyframes.
-          All three SVGs are stacked at bottom:0/left:0 inside a fixed 18×36 box. */}
-      <div
+      {/* Three-pose walking cycle. Poses crossfade via walkerCycleMax/Half/Neutral keyframes.
+          Cycle: Max(0%) → Half(25%) → Neutral(50%) → Half(75%) → Max(100%) → loop.
+          No translateX/translateY on any wrapper — horizontal position is xPercent only. */}
+      <svg
+        width="36"
+        height="36"
+        viewBox="0 0 36 36"
+        fill="none"
         style={{
           position: 'absolute',
           bottom: 0,
-          left: '50%',
-          marginLeft: -9,
-          width: 18,
-          height: 36,
+          left: 0,
           zIndex: 1,
           filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))',
         }}
       >
-        {/* WalkerPoseA: right arm forward (high-right), left leg forward, right leg back */}
-        <svg
-          width="18"
-          height="36"
-          viewBox="0 0 18 36"
-          fill="rgba(255,255,255,0.78)"
-          style={poseSvgStyle('walkerPoseA')}
-        >
-          {head}
-          <path d="M12,7.5 L15,9 L16.5,14 L15,15.5 L13.5,13 L13.5,21 L15.5,28 L17,35 L15,36 L13.5,35 L12.5,28 L10.5,22 L8,28 L6,34 L4,34 L5.5,27.5 L7,21 L7,15 L5,17.5 L6.5,19 L7.5,16 L8,7.5 Z" />
-        </svg>
+        {/* PoseMax — full stride: arms ±6x/+6y, legs ±8x/+10y from pivots */}
+        <g style={poseAnim('walkerCycleMax')}>
+          {Head}
+          {Torso}
+          {L(18, 9,  24, 15)}  {/* forward arm */}
+          {L(18, 9,  12, 15)}  {/* back arm */}
+          {L(18, 22, 26, 32)}  {/* forward leg */}
+          {L(18, 22, 10, 32)}  {/* back leg */}
+        </g>
 
-        {/* WalkerPoseB: arms vertical (mid-swing), legs nearly together (mid-stride) */}
-        <svg
-          width="18"
-          height="36"
-          viewBox="0 0 18 36"
-          fill="rgba(255,255,255,0.78)"
-          style={poseSvgStyle('walkerPoseB')}
-        >
-          {head}
-          <path d="M12,7.5 L14,9 L14.5,15.5 L13.5,17 L12.5,15 L12.5,21 L13.5,28 L14,35 L12,36 L11,35 L10.5,28 L9.5,22 L8.5,28 L8,35 L6,35 L7,28 L7.5,21 L7,15 L5.5,16 L7,17 L7.5,15.5 L8,7.5 Z" />
-        </svg>
+        {/* PoseHalf — half stride: arms ±3x/+7y, legs ±4x/+10.5y from pivots */}
+        <g style={poseAnim('walkerCycleHalf')}>
+          {Head}
+          {Torso}
+          {L(18, 9,  21, 16)}    {/* forward arm */}
+          {L(18, 9,  15, 16)}    {/* back arm */}
+          {L(18, 22, 22, 32.5)}  {/* forward leg */}
+          {L(18, 22, 14, 32.5)}  {/* back leg */}
+        </g>
 
-        {/* WalkerPoseC: right arm swept back (barely protrudes right), left arm forward (upper-left bump),
-            right leg forward, left leg back */}
-        <svg
-          width="18"
-          height="36"
-          viewBox="0 0 18 36"
-          fill="rgba(255,255,255,0.78)"
-          style={poseSvgStyle('walkerPoseC')}
-        >
-          {head}
-          <path d="M12,7.5 L12.5,9 L12,16 L11,17.5 L12,14.5 L13,21 L15.5,28 L17,35 L15,36 L13.5,35 L12.5,28 L10.5,22 L8,28 L6,34 L4,34 L5.5,27.5 L7,21 L6.5,14.5 L9,12 L8.5,10.5 L7.5,13.5 L8,7.5 Z" />
-        </svg>
-      </div>
+        {/* PoseNeutral — legs together, arms slightly forward (+1x/+8y).
+            Both arms and both legs each stack two identical lines so visual
+            weight reads consistent — no sudden thinning at neutral. */}
+        <g style={poseAnim('walkerCycleNeutral')}>
+          {Head}
+          {Torso}
+          {L(18, 9,  19, 17)}  {/* arm 1 (stacked) */}
+          {L(18, 9,  19, 17)}  {/* arm 2 (stacked) */}
+          {L(18, 22, 18, 33)}  {/* leg 1 (stacked) */}
+          {L(18, 22, 18, 33)}  {/* leg 2 (stacked) */}
+        </g>
+      </svg>
     </div>
   );
 }

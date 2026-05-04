@@ -158,22 +158,19 @@
   15% { opacity: 0.75; }
   100% { transform: translateY(175px); opacity: 0; }
 }
-/* Three-pose walker cycle: A→B→C with ~60ms crossfade at each transition (5% of 1.2s). */
-@keyframes walkerPoseA {
-  0%, 28% { opacity: 1; }
-  33%      { opacity: 0; }
-  95%      { opacity: 0; }
-  100%     { opacity: 1; }
+/* Walker back-and-forth: Max (0%) → Half (25%) → Neutral (50%) → Half (75%) → Max (100%) */
+@keyframes walkerCycleMax {
+  0%, 100% { opacity: 1; }
+  12%, 88% { opacity: 0; }
 }
-@keyframes walkerPoseB {
-  0%, 28%   { opacity: 0; }
-  33%, 61%  { opacity: 1; }
-  66%, 100% { opacity: 0; }
+@keyframes walkerCycleHalf {
+  0%, 12%, 88%, 100% { opacity: 0; }
+  25%, 75% { opacity: 1; }
+  50% { opacity: 0; }
 }
-@keyframes walkerPoseC {
-  0%, 61%   { opacity: 0; }
-  66%, 96%  { opacity: 1; }
-  100%      { opacity: 0; }
+@keyframes walkerCycleNeutral {
+  0%, 38%, 62%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
 @keyframes travelerRingPulse {
   0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
