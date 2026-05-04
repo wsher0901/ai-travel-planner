@@ -293,18 +293,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     return map;
   }, [tripDays, planItems]);
 
-  const nowPercent = useMemo(() => {
-    if (!selectedDate) return null;
-    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TIMEZONE });
-    if (selectedDate !== todayStr) return null;
-    const fmt = new Intl.DateTimeFormat('en-US', {
-      timeZone: TIMEZONE, hour: 'numeric', minute: 'numeric', hour12: false,
-    });
-    const parts = fmt.formatToParts(new Date());
-    const h = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10) % 24;
-    const m = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
-    return minuteToTimelinePercent(h * 60 + m);
-  }, [selectedDate, TIMEZONE]);
 
   const renderPillsForDay = useCallback((date: string) => {
     const dayPills = pillsByDay[date] ?? [];
@@ -566,7 +554,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
 
           const renderSlot = (slotDate: string | null) => {
             if (!slotDate) return null;
-            const slotNowPercent = slotDate === selectedDate ? nowPercent : null;
             const isActive = slotDate === activeDate;
 
             return (
@@ -618,40 +605,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                   position: 'relative',
                   pointerEvents: isActive ? 'auto' : 'none',
                 }}>
-                  {slotNowPercent !== null && (
-                    <>
-                      <div style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: `${slotNowPercent}%`,
-                        width: 22,
-                        height: 22,
-                        borderRadius: '50%',
-                        background: 'radial-gradient(circle, rgba(245,158,11,0.35) 0%, transparent 70%)',
-                        animation: 'travelerRingPulse 2s ease-in-out infinite',
-                        pointerEvents: 'none',
-                        zIndex: 5,
-                      }} />
-                      <div style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: `${slotNowPercent}%`,
-                        transformOrigin: 'center bottom',
-                        animation: 'travelerSway 1s ease-in-out infinite',
-                        filter: 'drop-shadow(0 0 6px rgba(245,158,11,0.75))',
-                        pointerEvents: 'none',
-                        zIndex: 6,
-                      }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgb(245,158,11)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="5" r="2.5"/>
-                          <path d="M9 22l1-7 2-3 2 3 1 7"/>
-                          <path d="M10 15l-3-3"/>
-                          <path d="M14 15l3-4"/>
-                        </svg>
-                      </div>
-                    </>
-                  )}
-
                   <div
                     style={{
                       position: 'absolute',
