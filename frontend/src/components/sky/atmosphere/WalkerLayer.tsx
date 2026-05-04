@@ -13,6 +13,19 @@ interface Props {
 export default function WalkerLayer({ xPercent, preset }: Props) {
   if (xPercent === null || preset === 'none') return null;
 
+  // Shared SVG props — three poses stack absolutely inside a 18×36 wrapper.
+  // Motion is purely opacity crossfade via walkerPoseA/B/C keyframes; no translateX
+  // or translateY anywhere in the walker render path.
+  const poseSvgStyle = (animName: string) => ({
+    position: 'absolute' as const,
+    bottom: 0,
+    left: 0,
+    animation: `${animName} 1.2s linear infinite`,
+  });
+
+  // Head is identical across all poses.
+  const head = <circle cx="10" cy="4" r="3" />;
+
   return (
     <div
       aria-hidden
@@ -43,28 +56,55 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
           zIndex: 0,
         }}
       />
-      {/* Side-view walking silhouette */}
+
+      {/* Three-pose walking cycle. Poses crossfade A→B→C via opacity keyframes.
+          All three SVGs are stacked at bottom:0/left:0 inside a fixed 18×36 box. */}
       <div
         style={{
           position: 'absolute',
           bottom: 0,
           left: '50%',
           marginLeft: -9,
+          width: 18,
+          height: 36,
           zIndex: 1,
-          animation: 'travelerSway 1s ease-in-out infinite',
           filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))',
         }}
       >
+        {/* WalkerPoseA: right arm forward (high-right), left leg forward, right leg back */}
         <svg
           width="18"
           height="36"
           viewBox="0 0 18 36"
           fill="rgba(255,255,255,0.78)"
+          style={poseSvgStyle('walkerPoseA')}
         >
-          {/* Head */}
-          <circle cx="11" cy="4" r="3.5" />
-          {/* Body: torso, front arm (forward), front leg, back leg, back arm (backward) */}
-          <path d="M13.5,8 L15.5,13 L14,14.5 L12.5,12 L13.5,20 L15.5,27 L17,35 L15,36 L13.5,35 L12.5,27 L10.5,22 L8.5,27 L7,34 L5,34 L6.5,27 L7.5,20 L7,14 L5.5,17.5 L7,18.5 L7.5,13.5 L8,8 Z" />
+          {head}
+          <path d="M12,7.5 L15,9 L16.5,14 L15,15.5 L13.5,13 L13.5,21 L15.5,28 L17,35 L15,36 L13.5,35 L12.5,28 L10.5,22 L8,28 L6,34 L4,34 L5.5,27.5 L7,21 L7,15 L5,17.5 L6.5,19 L7.5,16 L8,7.5 Z" />
+        </svg>
+
+        {/* WalkerPoseB: arms vertical (mid-swing), legs nearly together (mid-stride) */}
+        <svg
+          width="18"
+          height="36"
+          viewBox="0 0 18 36"
+          fill="rgba(255,255,255,0.78)"
+          style={poseSvgStyle('walkerPoseB')}
+        >
+          {head}
+          <path d="M12,7.5 L14,9 L14.5,15.5 L13.5,17 L12.5,15 L12.5,21 L13.5,28 L14,35 L12,36 L11,35 L10.5,28 L9.5,22 L8.5,28 L8,35 L6,35 L7,28 L7.5,21 L7,15 L5.5,16 L7,17 L7.5,15.5 L8,7.5 Z" />
+        </svg>
+
+        {/* WalkerPoseC: right arm back, left arm forward (near body-front), right leg forward, left leg back */}
+        <svg
+          width="18"
+          height="36"
+          viewBox="0 0 18 36"
+          fill="rgba(255,255,255,0.78)"
+          style={poseSvgStyle('walkerPoseC')}
+        >
+          {head}
+          <path d="M12,7.5 L13.5,9 L14.5,15 L13.5,16.5 L12.5,14 L13.5,21 L15.5,28 L17,35 L15,36 L13.5,35 L12.5,28 L10.5,22 L8,28 L6,34 L4,34 L5.5,27.5 L7,21 L6.5,14.5 L9,12 L8.5,10.5 L7.5,13.5 L8,7.5 Z" />
         </svg>
       </div>
     </div>
