@@ -29,7 +29,7 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
   const Torso = L(18, 9, 18, 22);
 
   const poseAnim = (name: string) => ({
-    animation: `${name} 1.4s linear infinite`,
+    animation: `${name} 1.4s step-end infinite`,
   });
 
   return (
@@ -63,8 +63,8 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
         }}
       />
 
-      {/* Three-pose walking cycle. Poses crossfade via walkerCycleMax/Half/Neutral keyframes.
-          Cycle: Max(0%) → Half(25%) → Neutral(50%) → Half(75%) → Max(100%) → loop.
+      {/* Three-pose walking cycle — hard cuts via step-end timing: only one pose visible at a time.
+          Cycle: Max(0-25%) → Half(25-50%) → Neutral(50-75%) → Half(75-100%) → loop @ 1.4s.
           No translateX/translateY on any wrapper — horizontal position is xPercent only. */}
       <svg
         width="36"
@@ -80,7 +80,7 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
         }}
       >
         {/* PoseMax — full stride: arms ±6x/+6y, legs ±8x/+10y from pivots */}
-        <g style={poseAnim('walkerCycleMax')}>
+        <g style={poseAnim('walkerPoseMax')}>
           {Head}
           {Torso}
           {L(18, 9,  24, 15)}  {/* forward arm */}
@@ -90,7 +90,7 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
         </g>
 
         {/* PoseHalf — half stride: arms ±3x/+7y, legs ±4x/+10.5y from pivots */}
-        <g style={poseAnim('walkerCycleHalf')}>
+        <g style={poseAnim('walkerPoseHalf')}>
           {Head}
           {Torso}
           {L(18, 9,  21, 16)}    {/* forward arm */}
@@ -102,7 +102,7 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
         {/* PoseNeutral — legs together, arms slightly forward (+1x/+8y).
             Both arms and both legs each stack two identical lines so visual
             weight reads consistent — no sudden thinning at neutral. */}
-        <g style={poseAnim('walkerCycleNeutral')}>
+        <g style={poseAnim('walkerPoseNeutral')}>
           {Head}
           {Torso}
           {L(18, 9,  19, 17)}  {/* arm 1 (stacked) */}
