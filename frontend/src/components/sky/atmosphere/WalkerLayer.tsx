@@ -27,7 +27,9 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
         zIndex: 0,
       }}
     >
-      {/* Pulsing ambient ring — behind silhouette via zIndex */}
+      {/* Pulsing ambient ring — behind silhouette via zIndex.
+          No inline transform: travelerRingPulse bakes translate(-50%,-50%) into
+          both keyframe stops, so centering is guaranteed for the animation duration. */}
       <div
         style={{
           position: 'absolute',
