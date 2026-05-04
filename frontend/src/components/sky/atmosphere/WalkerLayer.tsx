@@ -95,7 +95,8 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
           <path d="M12,7.5 L14,9 L14.5,15.5 L13.5,17 L12.5,15 L12.5,21 L13.5,28 L14,35 L12,36 L11,35 L10.5,28 L9.5,22 L8.5,28 L8,35 L6,35 L7,28 L7.5,21 L7,15 L5.5,16 L7,17 L7.5,15.5 L8,7.5 Z" />
         </svg>
 
-        {/* WalkerPoseC: right arm back, left arm forward (near body-front), right leg forward, left leg back */}
+        {/* WalkerPoseC: right arm swept back (barely protrudes right), left arm forward (upper-left bump),
+            right leg forward, left leg back */}
         <svg
           width="18"
           height="36"
@@ -104,7 +105,7 @@ export default function WalkerLayer({ xPercent, preset }: Props) {
           style={poseSvgStyle('walkerPoseC')}
         >
           {head}
-          <path d="M12,7.5 L13.5,9 L14.5,15 L13.5,16.5 L12.5,14 L13.5,21 L15.5,28 L17,35 L15,36 L13.5,35 L12.5,28 L10.5,22 L8,28 L6,34 L4,34 L5.5,27.5 L7,21 L6.5,14.5 L9,12 L8.5,10.5 L7.5,13.5 L8,7.5 Z" />
+          <path d="M12,7.5 L12.5,9 L12,16 L11,17.5 L12,14.5 L13,21 L15.5,28 L17,35 L15,36 L13.5,35 L12.5,28 L10.5,22 L8,28 L6,34 L4,34 L5.5,27.5 L7,21 L6.5,14.5 L9,12 L8.5,10.5 L7.5,13.5 L8,7.5 Z" />
         </svg>
       </div>
     </div>
