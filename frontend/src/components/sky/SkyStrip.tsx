@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { type SkyStripProps } from './types';
 import { getSunTimes, getSeasonalPalette } from '@/lib/sunPosition';
 import { useTripStore } from '@/store/tripStore';
@@ -13,20 +13,14 @@ import {
 } from './atmosphere/SceneAtmosphere';
 import WeatherLayer from './atmosphere/WeatherLayer';
 import WeatherDevCycler from './atmosphere/WeatherDevCycler';
-import {
-  getCurrentMinuteInTimezone,
-  minuteToDate,
-} from './atmosphere/sunScenePos';
+import { minuteToDate } from './atmosphere/sunScenePos';
 
 export default function SkyStrip({
   date, lat, lng,
   timezone = 'UTC',
   scenery = 'mountainscape',
-  walker = 'person',
-  walkerXPercent = null,
   weatherSegments = [],
   palette: paletteProp,
-  isToday = false,
   aspectScale = 1,
 }: SkyStripProps) {
   const sunTimes = useMemo(
@@ -56,30 +50,11 @@ export default function SkyStrip({
     return null;
   }, [sunTimes]);
 
-  // Tick the local-tz minute. Drives both atmosphere golden-hour detection
-  // and live sun-position glow. Only ticks for today.
-  const [currentMinute, setCurrentMinute] = useState(() => simulatedMinute ?? getCurrentMinuteInTimezone(timezone));
-  useEffect(() => {
-    if (simulatedMinute !== null) {
-      setCurrentMinute(simulatedMinute);
-      return;
-    }
-    setCurrentMinute(getCurrentMinuteInTimezone(timezone));
-    if (!isToday) return;
-    const id = setInterval(() => {
-      setCurrentMinute(getCurrentMinuteInTimezone(timezone));
-    }, 60_000);
-    return () => clearInterval(id);
-  }, [isToday, timezone, simulatedMinute]);
-
-  // Atmosphere clock. For non-today, anchor "now" to solar noon so the
-  // strip reads as full daylight rather than whatever the wall clock is.
-  // Dev override (simulatedMinute) bypasses this so we can probe sunrise/sunset.
+  // Atmosphere clock anchored to solar noon. Dev ?atmoTime= override bypasses
+  // this so golden-hour visuals can be probed without touching the system clock.
   const refMinute = useMemo(() => (
-    simulatedMinute !== null
-      ? simulatedMinute
-      : (isToday ? currentMinute : Math.round(sunTimes.solarNoonMin))
-  ), [isToday, currentMinute, sunTimes, simulatedMinute]);
+    simulatedMinute !== null ? simulatedMinute : Math.round(sunTimes.solarNoonMin)
+  ), [sunTimes, simulatedMinute]);
 
   const hourFloat = refMinute / 60;
 
@@ -134,7 +109,6 @@ export default function SkyStrip({
             lng={lng}
             timezone={timezone}
             date={date}
-            isToday={isToday}
             aspectScale={aspectScale}
           />
         </svg>
@@ -163,10 +137,7 @@ export default function SkyStrip({
         </svg>
 
         {/* Layer 3: atmosphere — modulates the whole scene */}
-        <WeatherLayer
-          walkerXPercent={walkerXPercent}
-          walkerPreset={walker}
-        />
+        <WeatherLayer />
 
         {/* Dev-only weather cycler (gated to non-prod inside the component) */}
         <WeatherDevCycler weather={cyclerOverride} onChange={setCyclerOverride} />

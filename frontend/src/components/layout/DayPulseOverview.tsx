@@ -14,10 +14,7 @@ import SkyStrip from '@/components/sky/SkyStrip';
 import { TimeLabelsStrip } from '@/components/sky/TimeLabelsStrip';
 import AnnotationStrip from '@/components/layout/AnnotationStrip';
 import { type WeatherSegment } from '@/components/sky/types';
-import { getIsToday } from '@/lib/sunPosition';
-import { getCurrentMinuteInTimezone } from '@/components/sky/atmosphere/sunScenePos';
-import { inferScenery } from '@/lib/inferScenery';
-import type { SceneryPreset, WalkerPreset } from '@/components/sky/types';
+import type { SceneryPreset } from '@/components/sky/types';
 import { useUIStore } from '@/store/uiStore';
 import { minuteToTimelinePercent, TIMELINE_INSET_PCT } from '@/lib/timelineInset';
 
@@ -140,32 +137,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     return STUB_WEATHER_PATTERNS[dayIndex % STUB_WEATHER_PATTERNS.length];
   }, [tripStartDateForWeather]);
 
-  const isToday = useMemo(
-    () => (selectedDate ? getIsToday(selectedDate, TIMEZONE) : false),
-    [selectedDate, TIMEZONE]
-  );
-
-  // Single source of walker x-position — shared by SkyStrip (WalkerLayer) and
-  // AnnotationStrip (collision math). Avoids dual timers drifting independently.
-  const [walkerMinute, setWalkerMinute] = useState(() =>
-    isToday ? getCurrentMinuteInTimezone(TIMEZONE) : 0,
-  );
-  useEffect(() => {
-    if (!isToday) {
-      setWalkerMinute(0);
-      return;
-    }
-    setWalkerMinute(getCurrentMinuteInTimezone(TIMEZONE));
-    const id = setInterval(
-      () => setWalkerMinute(getCurrentMinuteInTimezone(TIMEZONE)),
-      60_000,
-    );
-    return () => clearInterval(id);
-  }, [isToday, TIMEZONE]);
-  const walkerXPercent = isToday ? minuteToTimelinePercent(walkerMinute) : null;
-
-  const walker: WalkerPreset = 'person';
-
   const tripStartDate = tripPlan?.start_date;
   const tripEndDate = tripPlan?.end_date;
   const tripDays = useMemo(() => {
@@ -186,10 +157,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
     return days;
   }, [tripStartDate, tripEndDate]);
 
-  const rawScenery = useTripStore((s) => s.tripPlan?.destination_scenery);
-  const destination = useTripStore((s) => s.tripPlan?.destination ?? '');
-  // TODO TEMP: hardcoded for forestscape visual testing — revert after verification.
-  // Revert to `rawScenery ?? inferScenery(destination)` (or 'cityscape') after review.
+  // TODO: revert to `rawScenery ?? inferScenery(destination)` after visual review.
   const scenery: SceneryPreset = 'mountainscape';
 
   const outerRef = useRef<HTMLDivElement>(null);
@@ -573,10 +541,7 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                       lng={LNG}
                       timezone={TIMEZONE}
                       scenery={scenery}
-                      walker={walker}
-                      walkerXPercent={slotDate === selectedDate ? walkerXPercent : null}
                       weatherSegments={getWeatherForDate(slotDate)}
-                      isToday={isToday && slotDate === selectedDate}
                       aspectScale={aspectScale}
                     />
                   )}
@@ -591,7 +556,6 @@ export default function DayPulseOverview({ selectedDate, planItems }: Props) {
                 <div style={{ flex: '10 1 0', minHeight: 0, position: 'relative', zIndex: 10, overflow: 'visible' }}>
                   <AnnotationStrip
                     date={slotDate}
-                    walkerXPercent={slotDate === selectedDate ? walkerXPercent : null}
                   />
                 </div>
 

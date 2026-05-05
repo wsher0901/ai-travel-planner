@@ -309,12 +309,9 @@ type Annotation =
 
 interface Props {
   date: string;
-  // x-position of the "now" walker as a percentage of strip width (0–100).
-  // Null when not today — collision math skips walker entirely.
-  walkerXPercent: number | null;
 }
 
-export default function AnnotationStrip({ date, walkerXPercent }: Props) {
+export default function AnnotationStrip({ date }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -390,8 +387,8 @@ export default function AnnotationStrip({ date, walkerXPercent }: Props) {
 
   // ──────────────────────────────────────────────────────────────────────
   // Collision resolution. Glyph midpoints shift right when they collide
-  // with the walker or a left neighbour. Tick markers (start/end of a run)
-  // sit at exact run boundaries and are NOT subject to collision.
+  // with a left neighbour. Tick markers (start/end of a run) sit at exact
+  // run boundaries and are NOT subject to collision.
 
   const positions: Array<Annotation & { displayPercent: number; compact: boolean }> =
     useMemo(() => {
@@ -399,21 +396,11 @@ export default function AnnotationStrip({ date, walkerXPercent }: Props) {
         return annotations.map((a) => ({ ...a, displayPercent: a.truePercent, compact: false }));
       }
 
-      const walkerPx = walkerXPercent !== null ? (walkerXPercent / 100) * containerWidth : null;
-
       const sorted = [...annotations].sort((a, b) => a.truePercent - b.truePercent);
       const displayPx: number[] = sorted.map((a) => (a.truePercent / 100) * containerWidth);
 
       for (let i = 0; i < sorted.length; i++) {
         let shifts = 0;
-
-        if (walkerPx !== null && Math.abs(displayPx[i] - walkerPx) < COLLISION_DETECT_PX) {
-          displayPx[i] =
-            displayPx[i] < walkerPx
-              ? walkerPx - SIDE_BY_SIDE_GAP_PX
-              : walkerPx + SIDE_BY_SIDE_GAP_PX;
-          shifts++;
-        }
 
         for (let j = i - 1; j >= 0 && shifts < 2; j--) {
           if (Math.abs(displayPx[i] - displayPx[j]) < COLLISION_DETECT_PX) {
@@ -449,7 +436,7 @@ export default function AnnotationStrip({ date, walkerXPercent }: Props) {
           compact: compactSet.has(si),
         };
       });
-    }, [annotations, containerWidth, walkerXPercent]);
+    }, [annotations, containerWidth]);
 
   // Decoration (ticks + connector) — runs ≥ TICK_MIN_DURATION_MIN only.
   const tickRuns = useMemo(

@@ -158,31 +158,6 @@
   15% { opacity: 0.75; }
   100% { transform: translateY(175px); opacity: 0; }
 }
-/* Walker back-and-forth: Max(0-25%) → Half(25-50%) → Neutral(50-75%) → Half(75-100%) → loops.
-   step-end on each group ensures hard cuts — no simultaneous visible poses. */
-@keyframes walkerPoseMax {
-  0%   { opacity: 1; }
-  25%  { opacity: 0; }
-  75%  { opacity: 0; }
-  100% { opacity: 1; }
-}
-@keyframes walkerPoseHalf {
-  0%   { opacity: 0; }
-  25%  { opacity: 1; }
-  50%  { opacity: 0; }
-  75%  { opacity: 1; }
-  100% { opacity: 0; }
-}
-@keyframes walkerPoseNeutral {
-  0%   { opacity: 0; }
-  50%  { opacity: 1; }
-  75%  { opacity: 0; }
-  100% { opacity: 0; }
-}
-@keyframes travelerRingPulse {
-  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
-  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
-}
 /* Registers --star-opacity as an animatable number so calc() works in @keyframes.
    Browsers that don't support @property fall back to twinkling 0.6→1 uniformly. */
 @property --star-opacity {

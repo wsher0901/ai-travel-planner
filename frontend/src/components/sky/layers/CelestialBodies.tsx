@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useEffect, useRef, useId } from 'react';
+import { useMemo, useId } from 'react';
 import { TIMELINE_INSET_PCT } from '@/lib/timelineInset';
 import {
   type SunTimes,
@@ -16,7 +16,6 @@ interface Props {
   lng: number;
   timezone: string;
   date: string;
-  isToday: boolean;
   aspectScale?: number;
 }
 
@@ -43,19 +42,6 @@ function interpolatePos(
   const s1   = samples[idx + 1] ?? samples[idx];
   const altitude = s0.altitude + (s1.altitude - s0.altitude) * t;
   return { x: (hour / 24) * 1000, y: 100 - (altitude / HALF_PI) * 80, altitude };
-}
-
-function getCurrentMinuteInTimezone(tz: string): number {
-  let fmt: Intl.DateTimeFormat;
-  try {
-    fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: 'numeric', hour12: false });
-  } catch {
-    fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', hour: 'numeric', minute: 'numeric', hour12: false });
-  }
-  const p = fmt.formatToParts(new Date());
-  const h = parseInt(p.find(x => x.type === 'hour')?.value ?? '0', 10) % 24;
-  const m = parseInt(p.find(x => x.type === 'minute')?.value ?? '0', 10);
-  return h * 60 + m;
 }
 
 // Returns the y coordinate on a quadratic Bezier at the point closest to targetX.
@@ -85,7 +71,7 @@ function bezierYatX(
 }
 
 export default function CelestialBodies({
-  sunTimes, lat, lng, timezone, date, isToday, aspectScale,
+  sunTimes, lat, lng, timezone, date, aspectScale,
 }: Props) {
   const as = aspectScale ?? 1;
   const moonMaskId = useId();
@@ -149,12 +135,9 @@ export default function CelestialBodies({
       raw[i] = SUN_VISIBLE_TIERS.has(samples48[i].conditionTier) ? 1 : 0;
     }
     const smoothed = smoothMask(raw);
-    const sunMinute = isToday
-      ? getCurrentMinuteInTimezone(timezone)
-      : sunTimes.solarNoonMin;
-    const idx = Math.max(0, Math.min(samples48.length - 1, Math.round(sunMinute / 30)));
+    const idx = Math.max(0, Math.min(samples48.length - 1, Math.round(sunTimes.solarNoonMin / 30)));
     return smoothed[idx] ?? 1;
-  }, [samples48, isToday, timezone, sunTimes.solarNoonMin]);
+  }, [samples48, sunTimes.solarNoonMin]);
 
   // Fade moon toward 0.3 opacity during daytime so it reads as "background" sky phenomenon
   const moonOpacity = useMemo(() => {
@@ -162,72 +145,6 @@ export default function CelestialBodies({
     const sunAlt = interpolatePos(hourlyElevations, moonMinute).altitude;
     return sunAlt < 0 ? 1.0 : Math.max(0.3, 1.0 - (sunAlt / HALF_PI) * 0.7);
   }, [moonMinute, moonData, hourlyElevations, isNewMoon]);
-
-  // Live "now" marker — ref-mutated on 60 s tick to avoid React re-renders
-  const liveRef = useRef<SVGGElement>(null);
-
-  useEffect(() => {
-    const el = liveRef.current;
-    if (!el) return;
-    if (!isToday) { el.style.display = 'none'; return; }
-
-    const update = (firstRun: boolean) => {
-      const g = liveRef.current;
-      if (!g) return;
-      const minute  = getCurrentMinuteInTimezone(timezone);
-      const { y, altitude } = interpolatePos(hourlyElevations, minute);
-      const x = minuteToInsetViewboxX(minute);
-      if (altitude < 0) { g.style.display = 'none'; return; }
-      g.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
-      if (firstRun) {
-        g.style.opacity    = '0';
-        g.style.display    = '';
-        g.style.transition = 'opacity 600ms ease-out';
-        requestAnimationFrame(() => { if (liveRef.current) liveRef.current.style.opacity = '1'; });
-      } else {
-        g.style.display = '';
-      }
-    };
-
-    update(true);
-    const id = setInterval(() => update(false), 60000);
-    return () => clearInterval(id);
-  }, [isToday, hourlyElevations, timezone]);
-
-  // Live moon marker (today only) — ref-mutated on 60 s tick
-  const moonLiveRef = useRef<SVGGElement>(null);
-
-  useEffect(() => {
-    const el = moonLiveRef.current;
-    if (!el) return;
-    if (!isToday || isNewMoon) { el.style.display = 'none'; return; }
-
-    const update = (firstRun: boolean) => {
-      const g = moonLiveRef.current;
-      if (!g) return;
-      const minute  = getCurrentMinuteInTimezone(timezone);
-      const pos     = getMoonPositionAtMinute(date, minute, lat, lng, timezone);
-      if (pos.altitude <= 0) { g.style.display = 'none'; return; }
-      const x = minuteToInsetViewboxX(minute);
-      const y = Math.max(20, 100 - (pos.altitude / HALF_PI) * 80);
-      const sunAlt = interpolatePos(hourlyElevations, minute).altitude;
-      const targetOpacity = sunAlt < 0 ? '1' : String(Math.max(0.3, 1 - (sunAlt / HALF_PI) * 0.7).toFixed(2));
-      g.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
-      if (firstRun) {
-        g.style.opacity    = '0';
-        g.style.display    = '';
-        g.style.transition = 'opacity 600ms ease-out';
-        requestAnimationFrame(() => { if (moonLiveRef.current) moonLiveRef.current.style.opacity = targetOpacity; });
-      } else {
-        g.style.opacity = targetOpacity;
-        g.style.display = '';
-      }
-    };
-
-    update(true);
-    const id = setInterval(() => update(false), 60000);
-    return () => clearInterval(id);
-  }, [isToday, isNewMoon, date, lat, lng, timezone, hourlyElevations]);
 
   return (
     <>
@@ -250,8 +167,8 @@ export default function CelestialBodies({
         />
       )}
 
-      {/* Solar noon marker — hidden on isToday (live marker takes over, matching moon pattern) */}
-      {!isToday && noonX !== null && noonY !== null && noonAltitude > 0 && (
+      {/* Solar noon marker */}
+      {noonX !== null && noonY !== null && noonAltitude > 0 && (
         <g transform={`translate(${noonX.toFixed(1)} ${noonY.toFixed(1)})`} style={{ opacity: sunOpacity }}>
           <ellipse rx={28 * as} ry={28} fill="rgba(180, 210, 200, 0.12)" />
           <ellipse rx={16 * as} ry={16} fill="rgba(220, 200, 100, 0.32)" />
@@ -259,26 +176,12 @@ export default function CelestialBodies({
         </g>
       )}
 
-      {/* Live "now" marker — position updated imperatively; outer g applies tier opacity */}
-      <g style={{ opacity: sunOpacity }}>
-        <g ref={liveRef} style={{ display: 'none', willChange: 'transform' }}>
-          <ellipse rx={28 * as} ry={28} fill="rgba(180, 210, 200, 0.12)" />
-          <ellipse rx={16 * as} ry={16} fill="rgba(220, 200, 100, 0.32)" />
-          <ellipse rx={9 * as}  ry={9}  fill="#F2CA40" />
-        </g>
-      </g>
-
-      {/* Moon — static at peak-altitude hour (hidden on today; live marker takes over) */}
-      {!isToday && moonX !== null && moonY !== null && (
+      {/* Moon — static at peak-altitude hour */}
+      {moonX !== null && moonY !== null && (
         <g transform={`translate(${moonX.toFixed(1)} ${moonY.toFixed(1)})`} opacity={moonOpacity}>
           <ellipse rx={7 * as} ry={7} fill="#6888a8" mask={`url(#${moonMaskId})`} />
         </g>
       )}
-
-      {/* Live moon — position updated imperatively on today */}
-      <g ref={moonLiveRef} style={{ display: 'none', willChange: 'transform' }}>
-        <ellipse rx={7 * as} ry={7} fill="#6888a8" mask={`url(#${moonMaskId})`} />
-      </g>
     </>
   );
 }
