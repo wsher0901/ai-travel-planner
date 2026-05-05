@@ -3,10 +3,11 @@ import { useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useSceneWeather } from '../SceneAtmosphere';
 import { smoothMask } from '../maskUtils';
+import { isSnowTier } from '@/lib/weather/mapping';
 import type { PrecipitationIntensity, SceneAtmosphere } from '@/lib/weather/types';
 
 // Snow-only particle layer. Particles only — no tint/dimming (Prompt 5).
-// Tier mask = 'snow' only.
+// Tier mask = light-snow / moderate-snow / heavy-snow.
 
 const INTENSITY_FACTOR: Record<PrecipitationIntensity, number> = {
   none: 0,
@@ -44,7 +45,7 @@ function buildSnowMask(samples: SceneAtmosphere[]): Float32Array {
   const raw = new Float32Array(samples.length);
   for (let i = 0; i < samples.length; i++) {
     const a = samples[i];
-    if (a.conditionTier === 'snow') {
+    if (isSnowTier(a.conditionTier)) {
       raw[i] = INTENSITY_FACTOR[a.precipitationIntensity] || 0.6;
     }
   }

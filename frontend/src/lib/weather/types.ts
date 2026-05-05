@@ -1,13 +1,20 @@
-// 7-tier union. 'cloudy' is split into 'partly-cloudy' (code 0-2, low cloud)
-// and 'overcast' (code 2-3, high cloud cover). All others unchanged from 3A.
+// 11-tier locked spec. Precipitation tiers carry their intensity in the name
+// (light/moderate/heavy) so visual tiers map 1:1 with WMO+visibility — no
+// secondary intensity lookup needed. Single source of truth: any consumer
+// extending the tier set must add a case to every `switch (tier)` (each
+// guarded by an exhaustive `never`-typed default), so TS catches drift.
 export type WeatherCondition =
   | 'sunny'
   | 'partly-cloudy'
   | 'overcast'
-  | 'fog'
-  | 'rain'
-  | 'storm'
-  | 'snow';
+  | 'foggy'
+  | 'light-rain'
+  | 'moderate-rain'
+  | 'heavy-rain'
+  | 'thunderstorm'
+  | 'light-snow'
+  | 'moderate-snow'
+  | 'heavy-snow';
 
 export type PrecipitationIntensity = 'none' | 'light' | 'moderate' | 'heavy';
 

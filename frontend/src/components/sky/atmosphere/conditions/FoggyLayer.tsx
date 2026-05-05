@@ -59,7 +59,7 @@ function buildFogMaskRaw(samples: SceneAtmosphere[]): Float32Array {
   const raw = new Float32Array(samples.length);
   for (let i = 0; i < samples.length; i++) {
     const atmo = samples[i];
-    const isFog = atmo.conditionTier === 'fog' || atmo.fogDensityMultiplier >= FOG_FLOOR;
+    const isFog = atmo.conditionTier === 'foggy' || atmo.fogDensityMultiplier >= FOG_FLOOR;
     if (!isFog) continue;
     raw[i] = Math.max(0, Math.min(1, atmo.fogDensityMultiplier || 1));
   }
@@ -84,8 +84,8 @@ export default function FoggyLayer() {
       const direction: 1 | -1 = horizontalSigned >= 0 ? 1 : -1;
       const baseSec = 30 / Math.max(0.5, Math.abs(horizontalSigned));
 
-      const tintGradient = buildConditionTintGradient(samples48, 'fog');
-      const dimmingGradient = buildConditionDimmingGradient(samples48, 'fog');
+      const tintGradient = buildConditionTintGradient(samples48, 'foggy');
+      const dimmingGradient = buildConditionDimmingGradient(samples48, 'foggy');
 
       return { maskImage, anyFog, tintGradient, dimmingGradient, direction, baseSec };
     }, [samples48]);

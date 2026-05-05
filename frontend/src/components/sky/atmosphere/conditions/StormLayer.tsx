@@ -71,7 +71,7 @@ function buildStormParticleMask(samples: SceneAtmosphere[]): Float32Array {
   const raw = new Float32Array(samples.length);
   for (let i = 0; i < samples.length; i++) {
     const a = samples[i];
-    if (a.conditionTier === 'storm') {
+    if (a.conditionTier === 'thunderstorm') {
       raw[i] = INTENSITY_FACTOR[a.precipitationIntensity] || 0.6;
     }
   }
@@ -82,7 +82,7 @@ function buildLightningMask(samples: SceneAtmosphere[]): { image: string; anySto
   const raw = new Float32Array(samples.length);
   let anyStorm = false;
   for (let i = 0; i < samples.length; i++) {
-    if (samples[i].conditionTier === 'storm') { raw[i] = 1; anyStorm = true; }
+    if (samples[i].conditionTier === 'thunderstorm') { raw[i] = 1; anyStorm = true; }
   }
   if (!anyStorm) {
     return {
@@ -137,8 +137,8 @@ export default function StormLayer() {
         maxFactor:      mx,
         flashMask,
         anyStorm,
-        tintGradient:    buildConditionTintGradient(samples48, 'storm'),
-        dimmingGradient: buildConditionDimmingGradient(samples48, 'storm'),
+        tintGradient:    buildConditionTintGradient(samples48, 'thunderstorm'),
+        dimmingGradient: buildConditionDimmingGradient(samples48, 'thunderstorm'),
       };
     }, [samples48]);
 

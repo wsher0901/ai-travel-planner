@@ -1,5 +1,4 @@
 'use client';
-import SunnyGlow from './SunnyGlow';
 import GoldenHourWash from './GoldenHourWash';
 import WalkerLayer from './WalkerLayer';
 import FoggyLayer from './conditions/FoggyLayer';
@@ -13,6 +12,7 @@ import WindyLayer from './conditions/WindyLayer';
 import type { WalkerPreset } from '@/components/sky/types';
 
 interface Props {
+  // Threaded through for the Prompt 3b sun-bloom layer; unused at present.
   sunPositionPct: { x: number; y: number };
   walkerXPercent: number | null;
   walkerPreset: WalkerPreset;
@@ -25,15 +25,14 @@ interface Props {
 //   1. FoggyLayer        — fog bands + fog tint/dimming
 //   2. PartlyCloudyLayer — placeholder (Prompt 4)
 //   3. OvercastLayer     — placeholder (Prompt 4)
-//   4. SunnyLayer        — placeholder (Prompt 3)
-//   5. SunnyGlow         — sun-position-anchored radial glow
-//   6. GoldenHourWash    — horizontal golden-hour wash
-//   7. WalkerLayer       — "now" figure; above scenery, below precipitation
-//   8. RainLayer         — rain particles + rain tint/dimming
-//   9. SnowLayer         — snow particles
-//  10. StormLayer        — storm rain + lightning + storm tint/dimming
-//  11. WindyLayer        — placeholder (Prompt 3)
-export default function WeatherLayer({ sunPositionPct, walkerXPercent, walkerPreset }: Props) {
+//   4. SunnyLayer        — placeholder (Prompt 3b — replaces deleted SunnyGlow)
+//   5. GoldenHourWash    — horizontal golden-hour wash (gated to sunny/partly-cloudy)
+//   6. WalkerLayer       — "now" figure; above scenery, below precipitation
+//   7. RainLayer         — rain particles + rain tint/dimming
+//   8. SnowLayer         — snow particles
+//   9. StormLayer        — storm rain + lightning + storm tint/dimming
+//  10. WindyLayer        — placeholder (Prompt 3)
+export default function WeatherLayer({ sunPositionPct: _sunPositionPct, walkerXPercent, walkerPreset }: Props) {
   return (
     <div
       aria-hidden
@@ -49,7 +48,6 @@ export default function WeatherLayer({ sunPositionPct, walkerXPercent, walkerPre
       <PartlyCloudyLayer />
       <OvercastLayer />
       <SunnyLayer />
-      <SunnyGlow sunPositionPct={sunPositionPct} />
       <GoldenHourWash />
       <WalkerLayer xPercent={walkerXPercent} preset={walkerPreset} />
       <RainLayer />

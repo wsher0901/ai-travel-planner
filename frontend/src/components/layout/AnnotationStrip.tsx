@@ -15,7 +15,7 @@ import { DAY_MINUTES } from '@/lib/timeAxis';
 import { hourToTimelinePercent, minuteToTimelinePercent } from '@/lib/timelineInset';
 import { useTripStore } from '@/store/tripStore';
 import { useTripWeather } from '@/hooks/useTripWeather';
-import { mapToConditionTier } from '@/lib/weather/mapping';
+import { isRainTier, isSnowTier, mapToConditionTier } from '@/lib/weather/mapping';
 import type { DayWeather, WeatherCondition } from '@/lib/weather/types';
 
 const ICON_SIZE = 18;
@@ -81,10 +81,10 @@ function detectPrecipTransitions(day: DayWeather): PrecipTransition[] {
   let prevTier: WeatherCondition | null = null;
   for (const h of sorted) {
     const tier = mapToConditionTier(h);
-    const isRainNow = tier === 'rain' || tier === 'storm';
-    const isSnowNow = tier === 'snow';
-    const wasRain = prevTier === 'rain' || prevTier === 'storm';
-    const wasSnow = prevTier === 'snow';
+    const isRainNow = isRainTier(tier) || tier === 'thunderstorm';
+    const isSnowNow = isSnowTier(tier);
+    const wasRain = prevTier !== null && (isRainTier(prevTier) || prevTier === 'thunderstorm');
+    const wasSnow = prevTier !== null && isSnowTier(prevTier);
     if (isRainNow && !wasRain) out.push({ hour: h.hour, mode: 'rain' });
     if (isSnowNow && !wasSnow) out.push({ hour: h.hour, mode: 'snow' });
     prevTier = tier;

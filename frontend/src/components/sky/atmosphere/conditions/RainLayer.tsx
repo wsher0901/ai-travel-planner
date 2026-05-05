@@ -7,11 +7,15 @@ import {
   buildConditionTintGradient,
   buildConditionDimmingGradient,
 } from '../maskUtils';
-import type { PrecipitationIntensity, SceneAtmosphere } from '@/lib/weather/types';
+import { isRainTier } from '@/lib/weather/mapping';
+import type { PrecipitationIntensity, SceneAtmosphere, WeatherCondition } from '@/lib/weather/types';
+
+const RAIN_TIERS: ReadonlyArray<WeatherCondition> = ['light-rain', 'moderate-rain', 'heavy-rain'];
 
 // Rain-only particle layer. Owns: cool tint (multiply) + dimming scoped to
-// rain regions, plus canvas rain particles. Tier mask = 'rain' only; storm
-// and snow are handled by their own layers. No flash-state coupling.
+// rain regions (light/moderate/heavy), plus canvas rain particles.
+// thunderstorm and snow tiers are handled by their own layers.
+// No flash-state coupling.
 
 const INTENSITY_FACTOR: Record<PrecipitationIntensity, number> = {
   none: 0,
@@ -53,7 +57,7 @@ function buildRainMask(samples: SceneAtmosphere[]): Float32Array {
   const raw = new Float32Array(samples.length);
   for (let i = 0; i < samples.length; i++) {
     const a = samples[i];
-    if (a.conditionTier === 'rain') {
+    if (isRainTier(a.conditionTier)) {
       raw[i] = INTENSITY_FACTOR[a.precipitationIntensity] || 0.6;
     }
   }
@@ -106,8 +110,8 @@ export default function RainLayer() {
         cdf: c,
         totalMass: c[c.length - 1],
         maxFactor: mx,
-        tintGradient: buildConditionTintGradient(samples48, 'rain'),
-        dimmingGradient: buildConditionDimmingGradient(samples48, 'rain'),
+        tintGradient: buildConditionTintGradient(samples48, RAIN_TIERS),
+        dimmingGradient: buildConditionDimmingGradient(samples48, RAIN_TIERS),
       };
     }, [samples48]);
 

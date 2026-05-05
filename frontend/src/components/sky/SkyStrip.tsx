@@ -97,7 +97,8 @@ export default function SkyStrip({
     [sunTimes]
   );
 
-  // Sun position drives the SunnyGlow center and the GoldenHourWash side.
+  // Sun position is threaded to the WeatherLayer for the Prompt 3b sun-bloom
+  // (currently unused — the legacy SunnyGlow halo was deleted in 3a).
   // Dev override → simulated time. Today + sun above horizon → live. Else → noon.
   const sunPositionPct = useMemo(() => {
     if (simulatedMinute !== null) {

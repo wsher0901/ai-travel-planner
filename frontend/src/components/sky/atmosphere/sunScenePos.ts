@@ -1,9 +1,10 @@
 import type { SunTimes } from '@/lib/sunPosition';
 import { TIMELINE_INSET_PCT } from '@/lib/timelineInset';
 
-// Mirrors the bezier arc geometry used by CelestialBodies.tsx so the
-// SunnyGlow center lines up with the rendered sun disc. Constants must
-// match CelestialBodies.tsx (ARC_HORIZON_Y=215, ARC_APEX_Y=-90).
+// Mirrors the bezier arc geometry used by CelestialBodies.tsx so the sun
+// position percent (consumed by WeatherLayer / future Prompt 3b sun-bloom)
+// lines up with the rendered sun disc. Constants must match
+// CelestialBodies.tsx (ARC_HORIZON_Y=215, ARC_APEX_Y=-90).
 const ARC_HORIZON_Y = 215;
 const ARC_APEX_Y = -90;
 const VIEWBOX_W = 1000;

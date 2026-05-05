@@ -8,7 +8,6 @@ import type {
   DayMeta,
   DayWeather,
   HourlyWeather,
-  PrecipitationIntensity,
   SceneAtmosphere,
   SunMood,
   WeatherCondition,
@@ -16,38 +15,135 @@ import type {
 
 const GOLDEN_HOUR_WINDOW_MIN = 45;
 
+export interface TierGradient {
+  top: string;    // hex — sky zenith
+  mid: string;    // hex — middle band
+  bottom: string; // hex — horizon
+}
+
 interface TierConfig {
-  tint: [number, number, number, number]; // r, g, b, a
+  // Locked-spec parameters consumed by Prompt 4/5 layers (cloud silhouettes,
+  // ceiling band, etc.). The atmosphere pipeline today reads only `tint` /
+  // `dimming` / `intensity`, but the gradient + lightness/saturation are
+  // surfaced here so future layers don't re-derive them.
+  lightness: number;            // 0..1
+  saturation: number;           // 0..1
+  gradient: TierGradient;       // 3-stop sky gradient (hex)
+  tint: [number, number, number, number]; // r, g, b, a — single-tint overlay
   dimming: number;
   intensity: number;
 }
 
-// Per-(tier, precipitation) atmosphere config. Mirrors 2A's CONDITION_CONFIG
-// values for the rain ladder so visuals stay consistent on real data.
-// partly-cloudy / overcast are provisional — visual tuning in Prompt 4/5.
-function getTierConfig(
-  tier: WeatherCondition,
-  precip: PrecipitationIntensity,
-): TierConfig {
+// Per-tier atmosphere config — locked 11-tier spec. Lightness/saturation/
+// gradient values match the 3B color spec exactly. The `tint` rgba is the
+// representative single-color overlay used by buildConditionTintGradient
+// (kept distinct from the 3-stop gradient so existing tier-scoped overlays
+// don't change character).
+//
+// Note: overcast and moderate-rain share lightness 0.38 and the same
+// gradient hex stack — they're distinguished by the ceiling band (Prompt 4),
+// not by overall sky brightness.
+function getTierConfig(tier: WeatherCondition): TierConfig {
   switch (tier) {
     case 'sunny':
-      return { tint: [255, 220, 140, 0.04], dimming: 0,    intensity: 0    };
+      return {
+        lightness: 0.90,
+        saturation: 0.85,
+        gradient:   { top: '#5BA8DD', mid: '#94C8E8', bottom: '#F4D080' },
+        tint:       [255, 220, 140, 0.04],
+        dimming:    0,
+        intensity:  0,
+      };
     case 'partly-cloudy':
-      return { tint: [180, 195, 215, 0.06], dimming: 0.04, intensity: 0.20 };
+      return {
+        lightness: 0.78,
+        saturation: 0.65,
+        gradient:   { top: '#5891C8', mid: '#8AAFD4', bottom: '#B0C8DE' },
+        tint:       [180, 195, 215, 0.06],
+        dimming:    0.04,
+        intensity:  0.20,
+      };
     case 'overcast':
-      return { tint: [170, 185, 205, 0.14], dimming: 0.12, intensity: 0.45 };
-    case 'fog':
-      return { tint: [200, 205, 215, 0.18], dimming: 0.12, intensity: 0.55 };
-    case 'rain':
-      if (precip === 'light')    return { tint: [150, 165, 185, 0.14], dimming: 0.15, intensity: 0.35 };
-      if (precip === 'moderate') return { tint: [120, 135, 160, 0.18], dimming: 0.22, intensity: 0.60 };
-      return                            { tint: [ 90, 105, 130, 0.24], dimming: 0.30, intensity: 0.85 };
-    case 'storm':
-      return { tint: [ 70,  80, 100, 0.28], dimming: 0.36, intensity: 1.0  };
-    case 'snow':
-      if (precip === 'light')    return { tint: [220, 225, 245, 0.10], dimming: 0.08, intensity: 0.30 };
-      if (precip === 'moderate') return { tint: [220, 225, 245, 0.16], dimming: 0.14, intensity: 0.55 };
-      return                            { tint: [225, 230, 250, 0.22], dimming: 0.20, intensity: 0.80 };
+      return {
+        lightness: 0.38,
+        saturation: 0.30,
+        gradient:   { top: '#34516D', mid: '#506A85', bottom: '#6C849C' },
+        tint:       [170, 185, 205, 0.14],
+        dimming:    0.12,
+        intensity:  0.45,
+      };
+    case 'foggy':
+      return {
+        lightness: 0.65,
+        saturation: 0.10,
+        gradient:   { top: '#A4A8AC', mid: '#B4B8BB', bottom: '#C5C8CB' },
+        tint:       [200, 205, 215, 0.18],
+        dimming:    0.12,
+        intensity:  0.55,
+      };
+    case 'light-rain':
+      return {
+        lightness: 0.55,
+        saturation: 0.40,
+        gradient:   { top: '#557799', mid: '#7392B0', bottom: '#91A8C0' },
+        tint:       [150, 165, 185, 0.14],
+        dimming:    0.15,
+        intensity:  0.35,
+      };
+    case 'moderate-rain':
+      return {
+        lightness: 0.38,
+        saturation: 0.45,
+        gradient:   { top: '#34516D', mid: '#506A85', bottom: '#6C849C' },
+        tint:       [120, 135, 160, 0.18],
+        dimming:    0.22,
+        intensity:  0.60,
+      };
+    case 'heavy-rain':
+      return {
+        lightness: 0.26,
+        saturation: 0.50,
+        gradient:   { top: '#1F354B', mid: '#354B62', bottom: '#4C6178' },
+        tint:       [ 90, 105, 130, 0.24],
+        dimming:    0.30,
+        intensity:  0.85,
+      };
+    case 'thunderstorm':
+      return {
+        lightness: 0.16,
+        saturation: 0.55,
+        gradient:   { top: '#0F1721', mid: '#1E2935', bottom: '#2D3845' },
+        tint:       [ 70,  80, 100, 0.28],
+        dimming:    0.36,
+        intensity:  1.0,
+      };
+    case 'light-snow':
+      return {
+        lightness: 0.68,
+        saturation: 0.15,
+        gradient:   { top: '#8E97A0', mid: '#A2ABB3', bottom: '#B6BCC2' },
+        tint:       [220, 225, 245, 0.10],
+        dimming:    0.08,
+        intensity:  0.30,
+      };
+    case 'moderate-snow':
+      return {
+        lightness: 0.75,
+        saturation: 0.10,
+        gradient:   { top: '#9FA9B0', mid: '#B3BBC2', bottom: '#C5CACF' },
+        tint:       [220, 225, 245, 0.16],
+        dimming:    0.14,
+        intensity:  0.55,
+      };
+    case 'heavy-snow':
+      return {
+        lightness: 0.82,
+        saturation: 0.05,
+        gradient:   { top: '#B5BDC4', mid: '#C5CCD2', bottom: '#D3D8DD' },
+        tint:       [225, 230, 250, 0.22],
+        dimming:    0.20,
+        intensity:  0.80,
+      };
     default: {
       const _exhaustive: never = tier;
       throw new Error(`Unhandled WeatherCondition in getTierConfig: ${_exhaustive}`);
@@ -66,14 +162,29 @@ function computeSunMood(
   tier: WeatherCondition,
   goldenHourActive: boolean,
 ): SunMood {
-  if (tier === 'storm') return 'hidden';
-  if (tier === 'rain' || tier === 'fog' || tier === 'snow') return 'muted';
-  // Heavy cloud cover dims the sun even without precipitation.
-  if (tier === 'overcast') return goldenHourActive ? 'warm' : 'muted';
-  // 'sunny' and 'partly-cloudy' get full golden-hour warmth when near sunrise/sunset.
-  if (tier === 'sunny' || tier === 'partly-cloudy') return goldenHourActive ? 'warm' : 'normal';
-  const _exhaustive: never = tier;
-  throw new Error(`Unhandled WeatherCondition in computeSunMood: ${_exhaustive}`);
+  switch (tier) {
+    case 'thunderstorm':
+      return 'hidden';
+    case 'foggy':
+    case 'light-rain':
+    case 'moderate-rain':
+    case 'heavy-rain':
+    case 'light-snow':
+    case 'moderate-snow':
+    case 'heavy-snow':
+      return 'muted';
+    // Heavy cloud cover dims the sun even without precipitation.
+    case 'overcast':
+      return goldenHourActive ? 'warm' : 'muted';
+    // Only clear-sky tiers get full golden-hour warmth.
+    case 'sunny':
+    case 'partly-cloudy':
+      return goldenHourActive ? 'warm' : 'normal';
+    default: {
+      const _exhaustive: never = tier;
+      throw new Error(`Unhandled WeatherCondition in computeSunMood: ${_exhaustive}`);
+    }
+  }
 }
 
 // Pure: single hourly snapshot → SceneAtmosphere.
@@ -83,10 +194,10 @@ export function getHourlyAtmosphere(
   hourFloat: number,
 ): SceneAtmosphere {
   const tier = mapToConditionTier(h);
-  const precip = mapPrecipIntensity(tier, h);
+  const precip = mapPrecipIntensity(tier);
   const fogDensityMultiplier = mapFogDensity(h.visibilityM);
 
-  const cfg = getTierConfig(tier, precip);
+  const cfg = getTierConfig(tier);
   const [r0, g0, b0, a] = cfg.tint;
 
   const sunriseMin = clockMinutes(daily.sunrise);
@@ -99,9 +210,10 @@ export function getHourlyAtmosphere(
     minutesFromSunrise <= GOLDEN_HOUR_WINDOW_MIN ||
     minutesFromSunset <= GOLDEN_HOUR_WINDOW_MIN;
 
-  // All clear-sky tiers qualify for golden-hour warming; precipitation and fog suppress it.
+  // Only clear-sky tiers qualify for golden-hour warming. Overcast no longer
+  // qualifies (Prompt 3a) — its sun is muted regardless of clock time.
   const goldenHourActive = nearGolden && (
-    tier === 'sunny' || tier === 'partly-cloudy' || tier === 'overcast'
+    tier === 'sunny' || tier === 'partly-cloudy'
   );
 
   let r = r0, g = g0, b = b0;
@@ -124,7 +236,7 @@ export function getHourlyAtmosphere(
     precipitationIntensity: precip,
     intensity: cfg.intensity,
     fogDensityMultiplier,
-    condition: deriveAtmosphereCondition(tier, precip),
+    condition: deriveAtmosphereCondition(tier),
     windy: h.windSpeedMps >= 7,
   };
 }

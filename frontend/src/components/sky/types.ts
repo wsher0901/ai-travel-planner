@@ -1,17 +1,7 @@
 import type { SeasonalPalette } from '@/lib/sunPosition';
+import type { WeatherCondition } from '@/lib/weather/types';
 
-export type { SeasonalPalette };
-
-export type WeatherCondition =
-  | 'clear'
-  | 'partly-cloudy'
-  | 'overcast'
-  | 'fog'
-  | 'rain-light'
-  | 'rain-heavy'
-  | 'thunderstorm'
-  | 'snow-light'
-  | 'snow-heavy';
+export type { SeasonalPalette, WeatherCondition };
 
 export interface WeatherSegment {
   startHour: number;   // 0-24 fractional
