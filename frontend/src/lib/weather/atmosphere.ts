@@ -65,11 +65,11 @@ function getTierConfig(tier: WeatherCondition): TierConfig {
       };
     case 'overcast':
       return {
-        lightness: 0.38,
+        lightness: 0.30,
         saturation: 0.30,
-        gradient:   { top: '#34516D', mid: '#506A85', bottom: '#6C849C' },
+        gradient:   { top: '#28425A', mid: '#3F576F', bottom: '#576E84' },
         tint:       [170, 185, 205, 0.14],
-        dimming:    0.12,
+        dimming:    0.16,
         intensity:  0.45,
       };
     case 'foggy':
@@ -83,36 +83,39 @@ function getTierConfig(tier: WeatherCondition): TierConfig {
       };
     case 'light-rain':
       return {
-        lightness: 0.55,
+        lightness: 0.42,
         saturation: 0.40,
-        gradient:   { top: '#557799', mid: '#7392B0', bottom: '#91A8C0' },
+        gradient:   { top: '#4D6580', mid: '#6B7E96', bottom: '#8A98AC' },
         tint:       [150, 165, 185, 0.14],
         dimming:    0.15,
         intensity:  0.35,
       };
+    // Brightness ladder: overcast === moderate-rain at lightness 0.30, sharing
+    // the same gradient hex stack so the only differentiator is precipitation
+    // tint + dim + particles. The ceiling-band hint (Prompt 4) was deferred.
     case 'moderate-rain':
       return {
-        lightness: 0.38,
+        lightness: 0.30,
         saturation: 0.45,
-        gradient:   { top: '#34516D', mid: '#506A85', bottom: '#6C849C' },
+        gradient:   { top: '#28425A', mid: '#3F576F', bottom: '#576E84' },
         tint:       [120, 135, 160, 0.18],
         dimming:    0.22,
         intensity:  0.60,
       };
     case 'heavy-rain':
       return {
-        lightness: 0.26,
+        lightness: 0.20,
         saturation: 0.50,
-        gradient:   { top: '#1F354B', mid: '#354B62', bottom: '#4C6178' },
+        gradient:   { top: '#18293D', mid: '#2C3E54', bottom: '#424F65' },
         tint:       [ 90, 105, 130, 0.24],
         dimming:    0.30,
         intensity:  0.85,
       };
     case 'thunderstorm':
       return {
-        lightness: 0.16,
+        lightness: 0.10,
         saturation: 0.55,
-        gradient:   { top: '#0F1721', mid: '#1E2935', bottom: '#2D3845' },
+        gradient:   { top: '#080E16', mid: '#161F2A', bottom: '#242E3A' },
         tint:       [ 70,  80, 100, 0.28],
         dimming:    0.36,
         intensity:  1.0,

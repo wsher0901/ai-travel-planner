@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { motion, useAnimationControls } from 'framer-motion';
 import { useSceneWeather } from '../SceneAtmosphere';
 import {
@@ -15,9 +15,38 @@ import {
 import type { PrecipitationIntensity, SceneAtmosphere } from '@/lib/weather/types';
 
 // Storm-only layer. Owns: cool tint (multiply) + heavy dimming scoped to
-// storm regions, rain particles (reads flash state for particle colour), and
-// lightning flash div (absorbed from LightningFlash.tsx).
+// storm regions, rain particles (reads flash state for particle colour),
+// lightning flash div, and gust streaks (Prompt 5).
 // ONLY this layer reads/writes lightningFlashState — RainLayer is isolated.
+
+// Storm rain density target (Prompt 5 spec): ~60 particles per 100% storm
+// coverage. Replaces the prior tier-conditional baseCountFor() so the
+// thunderstorm reads denser than heavy-rain (50) but doesn't double up
+// when baseCountFor maxed at 120.
+const STORM_RAIN_DENSITY = 60;
+
+// Gust spike scheduling — random 4–9 s between bursts. The CSS animation
+// (`gustBurst` in globals.css) runs for exactly 600 ms; the unmount timer
+// fires at 650 ms so JS timer imprecision can't unmount the streak before
+// its fade-out keyframe completes.
+const GUST_DELAY_MIN = 4000;
+const GUST_DELAY_RANGE = 5000;
+const GUST_DURATION_MS = 650;
+
+// Pre-authored gust streaks. 4 horizontal-leaning lines at varied y. Length
+// is in viewBox-x units (8–20 units = ~80–120 px on a 600-wide strip).
+interface GustStreak {
+  x1: number;
+  y: number;
+  length: number;
+}
+const GUST_STREAKS: ReadonlyArray<GustStreak> = [
+  { x1:  6, y: 24, length: 18 },
+  { x1: 58, y: 41, length: 14 },
+  { x1: 28, y: 60, length: 20 },
+  { x1: 73, y: 78, length: 13 },
+];
+const GUST_STROKE = 'rgba(220, 230, 240, 0.35)';
 
 const INTENSITY_FACTOR: Record<PrecipitationIntensity, number> = {
   none: 0,
@@ -114,27 +143,19 @@ function sampleWeightedX(cdf: Float32Array, total: number, cssW: number): number
   return ((lo + segR) / (cdf.length - 1)) * cssW;
 }
 
-function baseCountFor(maxFactor: number): number {
-  if (maxFactor <= 0.25) return 30;
-  if (maxFactor <= 0.6)  return 60;
-  return 120;
-}
-
 export default function StormLayer() {
-  const { samples48 } = useSceneWeather();
+  const { samples48, atmosphere } = useSceneWeather();
+  const isStorm = atmosphere.conditionTier === 'thunderstorm';
 
-  const { mask, cdf, totalMass, maxFactor, flashMask, anyStorm, tintGradient, dimmingGradient } =
+  const { mask, cdf, totalMass, flashMask, anyStorm, tintGradient, dimmingGradient } =
     useMemo(() => {
       const m  = buildStormParticleMask(samples48);
       const c  = buildCDF(m);
-      let mx   = 0;
-      for (let i = 0; i < m.length; i++) if (m[i] > mx) mx = m[i];
       const { image: flashMask, anyStorm } = buildLightningMask(samples48);
       return {
         mask: m,
         cdf: c,
         totalMass:      c[c.length - 1],
-        maxFactor:      mx,
         flashMask,
         anyStorm,
         tintGradient:    buildConditionTintGradient(samples48, 'thunderstorm'),
@@ -147,11 +168,9 @@ export default function StormLayer() {
   const samplesRef   = useRef<SceneAtmosphere[]>(samples48);
   const cdfRef       = useRef<Float32Array>(cdf);
   const totalRef     = useRef<number>(totalMass);
-  const maxRef       = useRef<number>(maxFactor);
   samplesRef.current = samples48;
   cdfRef.current     = cdf;
   totalRef.current   = totalMass;
-  maxRef.current     = maxFactor;
   void mask;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -196,7 +215,9 @@ export default function StormLayer() {
     const targetCount = (): number => {
       const c = cdfRef.current;
       if (!c || c.length < 2) return 0;
-      return Math.round(baseCountFor(maxRef.current) * (totalRef.current / (c.length - 1)));
+      // Density is proportional to storm coverage: full-strip storm → 60
+      // particles; half-strip → 30; etc.
+      return Math.round(STORM_RAIN_DENSITY * (totalRef.current / (c.length - 1)));
     };
 
     const spawn = (initial: boolean): Particle | null => {
@@ -316,6 +337,38 @@ export default function StormLayer() {
     };
   }, [anyStorm, controls]);
 
+  // --- Gust spike scheduling ---
+  // Wind streaks fire on a random 4–9 s timer, each burst lasts 600 ms.
+  // Two-phase loop (idle → burst start → 600 ms → burst end → next idle)
+  // tracked through a single `timerId` and a `cancelled` flag so unmount
+  // or tier change can't race a stale callback into setState.
+  const [gustActive, setGustActive] = useState(false);
+  useEffect(() => {
+    if (!isStorm) return;
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = () => {
+      const delay = GUST_DELAY_MIN + Math.random() * GUST_DELAY_RANGE;
+      timerId = setTimeout(() => {
+        if (cancelled) return;
+        setGustActive(true);
+        timerId = setTimeout(() => {
+          if (cancelled) return;
+          setGustActive(false);
+          schedule();
+        }, GUST_DURATION_MS);
+      }, delay);
+    };
+    schedule();
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) clearTimeout(timerId);
+      setGustActive(false);
+    };
+  }, [isStorm]);
+
   const flashMaskStyle: CSSProperties = {
     maskImage: flashMask,
     WebkitMaskImage: flashMask,
@@ -380,6 +433,45 @@ export default function StormLayer() {
         initial={{ opacity: 0 }}
         animate={controls}
       />
+      {/* Gust spikes — fade-in/slide/fade-out streaks scoped to thunderstorm
+          x-regions via the same mask the lightning flash uses (asymmetric
+          ramp from buildWhiteMaskGradient, mirrored 45 min lead-in / 15 min
+          lead-out). isStorm gates the BURST trigger; flashMask gates SPATIAL
+          visibility — outside thunderstorm hours the mask is alpha-0 so
+          gust streaks are invisible regardless of gustActive. */}
+      {gustActive && isStorm && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            maskImage: flashMask,
+            WebkitMaskImage: flashMask,
+          }}
+        >
+          <svg
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+          >
+            <g className="sky-gust-burst">
+              {GUST_STREAKS.map((s, i) => (
+                <line
+                  key={i}
+                  x1={s.x1}
+                  y1={s.y}
+                  x2={s.x1 + s.length}
+                  y2={s.y}
+                  stroke={GUST_STROKE}
+                  strokeWidth={1}
+                  strokeLinecap="round"
+                />
+              ))}
+            </g>
+          </svg>
+        </div>
+      )}
     </>
   );
 }

@@ -10,12 +10,22 @@ import {
 import { isRainTier } from '@/lib/weather/mapping';
 import type { PrecipitationIntensity, SceneAtmosphere, WeatherCondition } from '@/lib/weather/types';
 
-const RAIN_TIERS: ReadonlyArray<WeatherCondition> = ['light-rain', 'moderate-rain', 'heavy-rain'];
+// Rain particle layer — single-stream canvas (mirrors StormLayer's pattern).
+// Cleanup: replaced the prior 3-cumulative-SVG-group system with one
+// weighted-spawn canvas. Per-tier density (light=15, moderate=30, heavy=50)
+// emerges from the intensity-factored mask × baseCount formula.
+//
+// Visual: blue stroke, ~70° tilt — consistent with StormLayer's rain so the
+// cross-layer transition (heavy-rain → thunderstorm zone) reads as the same
+// rain getting denser, not a different particle system. Sub-tier color
+// differentiation is intentionally minimal; the tier-scoped tint and the
+// raw count carry the intensity cue.
 
-// Rain-only particle layer. Owns: cool tint (multiply) + dimming scoped to
-// rain regions (light/moderate/heavy), plus canvas rain particles.
-// thunderstorm and snow tiers are handled by their own layers.
-// No flash-state coupling.
+const RAIN_TIERS: ReadonlyArray<WeatherCondition> = [
+  'light-rain',
+  'moderate-rain',
+  'heavy-rain',
+];
 
 const INTENSITY_FACTOR: Record<PrecipitationIntensity, number> = {
   none: 0,
@@ -39,7 +49,7 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 function rainDims(factor: number, isFg: boolean) {
   const lengthBase = lerp(11, 25, factor);
-  const widthBase  = lerp(1.5, 3, factor);
+  const widthBase  = lerp(1.5, 3,  factor);
   const speedBase  = lerp(700, 1700, factor);
   const opBase     = lerp(0.4, 0.75, factor);
   const lenVar = 1 + (Math.random() * 2 - 1) * 0.15;
@@ -67,22 +77,17 @@ function buildRainMask(samples: SceneAtmosphere[]): Float32Array {
 function buildCDF(mask: Float32Array): Float32Array {
   const cdf = new Float32Array(mask.length + 1);
   let acc = 0;
-  for (let i = 0; i < mask.length; i++) {
-    acc += mask[i];
-    cdf[i + 1] = acc;
-  }
+  for (let i = 0; i < mask.length; i++) { acc += mask[i]; cdf[i + 1] = acc; }
   return cdf;
 }
 
 function sampleWeightedX(cdf: Float32Array, total: number, cssW: number): number {
   if (total <= 0) return Math.random() * cssW;
   const r = Math.random() * total;
-  let lo = 0;
-  let hi = cdf.length - 1;
+  let lo = 0, hi = cdf.length - 1;
   while (lo + 1 < hi) {
     const mid = (lo + hi) >> 1;
-    if (cdf[mid + 1] <= r) lo = mid + 1;
-    else hi = mid;
+    if (cdf[mid + 1] <= r) lo = mid + 1; else hi = mid;
   }
   const segStart = cdf[lo];
   const segMass  = cdf[lo + 1] - segStart;
@@ -90,10 +95,17 @@ function sampleWeightedX(cdf: Float32Array, total: number, cssW: number): number
   return ((lo + segR) / (cdf.length - 1)) * cssW;
 }
 
+// Per-tier density: light-only days use a higher base count to compensate
+// for their lower mask intensity (0.25), so light × 60 = 15 particles;
+// moderate (0.6) and heavy (1.0) share base 50 since the mask intensity
+// itself scales them to 30 and 50 respectively.
+//
+// Worked example for full-day coverage:
+//   light    maxFactor 0.25 → base 60 → 60 × 0.25 = 15 particles
+//   moderate maxFactor 0.60 → base 50 → 50 × 0.60 = 30 particles
+//   heavy    maxFactor 1.00 → base 50 → 50 × 1.00 = 50 particles
 function baseCountFor(maxFactor: number): number {
-  if (maxFactor <= 0.25) return 30;
-  if (maxFactor <= 0.6)  return 60;
-  return 120;
+  return maxFactor <= 0.30 ? 60 : 50;
 }
 
 export default function RainLayer() {
@@ -101,16 +113,16 @@ export default function RainLayer() {
 
   const { mask, cdf, totalMass, maxFactor, tintGradient, dimmingGradient } =
     useMemo(() => {
-      const m = buildRainMask(samples48);
-      const c = buildCDF(m);
-      let mx = 0;
+      const m  = buildRainMask(samples48);
+      const c  = buildCDF(m);
+      let mx   = 0;
       for (let i = 0; i < m.length; i++) if (m[i] > mx) mx = m[i];
       return {
         mask: m,
         cdf: c,
         totalMass: c[c.length - 1],
         maxFactor: mx,
-        tintGradient: buildConditionTintGradient(samples48, RAIN_TIERS),
+        tintGradient:    buildConditionTintGradient(samples48, RAIN_TIERS),
         dimmingGradient: buildConditionDimmingGradient(samples48, RAIN_TIERS),
       };
     }, [samples48]);
@@ -138,8 +150,7 @@ export default function RainLayer() {
     if (!ctx) return;
 
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    let cssW = 1;
-    let cssH = 1;
+    let cssW = 1, cssH = 1;
     let particles: Particle[] = [];
     let raf = 0;
     let lastT = performance.now();
@@ -169,9 +180,7 @@ export default function RainLayer() {
     const targetCount = (): number => {
       const c = cdfRef.current;
       if (!c || c.length < 2) return 0;
-      const total = totalRef.current;
-      const fraction = total / (c.length - 1);
-      return Math.round(baseCountFor(maxRef.current) * fraction);
+      return Math.round(baseCountFor(maxRef.current) * (totalRef.current / (c.length - 1)));
     };
 
     const spawn = (initial: boolean): Particle | null => {
@@ -179,19 +188,18 @@ export default function RainLayer() {
       const x = sampleWeightedX(cdfRef.current, totalRef.current, cssW);
       const samples = samplesRef.current;
       const idx = Math.min(samples.length - 1, Math.max(0, Math.floor((x / cssW) * samples.length)));
-      const atmo   = samples[idx];
-      const factor = INTENSITY_FACTOR[atmo.precipitationIntensity] || 0.6;
-      const isFg   = Math.random() < 0.7;
-      const dims   = rainDims(factor, isFg);
+      const factor = INTENSITY_FACTOR[samples[idx].precipitationIntensity] || 0.6;
+      const isFg = Math.random() < 0.7;
+      const dims = rainDims(factor, isFg);
       return {
         x,
         y: initial ? Math.random() * cssH : -dims.length,
-        length:       dims.length,
-        width:        dims.width,
-        speed:        dims.speed,
-        opacity:      dims.opacity,
+        length:      dims.length,
+        width:       dims.width,
+        speed:       dims.speed,
+        opacity:     dims.opacity,
         isFg,
-        jitterPhase:  Math.random() * Math.PI * 2,
+        jitterPhase: Math.random() * Math.PI * 2,
       };
     };
 
@@ -245,11 +253,7 @@ export default function RainLayer() {
     };
 
     raf = requestAnimationFrame((t) => { lastT = t; tick(t); });
-
-    return () => {
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-    };
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
 
   return (
@@ -279,7 +283,7 @@ export default function RainLayer() {
         initial={false}
         transition={{ duration: 1.2, ease: 'easeInOut' }}
       />
-      {/* Rain particle canvas */}
+      {/* Particle canvas */}
       <motion.div
         ref={containerRef}
         aria-hidden

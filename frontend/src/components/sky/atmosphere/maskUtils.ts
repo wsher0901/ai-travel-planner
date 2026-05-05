@@ -40,7 +40,34 @@ export function smoothMask(raw: ArrayLike<number>): Float32Array {
 
 // White-with-alpha mask gradient. Works in both alpha-mode and the legacy
 // luminance-mode default (older Safari): white * alpha ≈ alpha for both.
-export function buildWhiteMaskGradient(mask: ArrayLike<number>): string {
+//
+// Two call shapes:
+//   buildWhiteMaskGradient(smoothedMask)             — pre-smoothed alpha array
+//   buildWhiteMaskGradient(samples48, predicate)     — predicate runs per
+//     sample; raw 0/1 mask is then smoothed with the asymmetric kernel.
+//   The predicate form lets callers combine a tier check with arbitrary
+//   per-sample conditions (e.g. sunny-and-daylight) without exposing the
+//   raw-mask construction loop.
+export function buildWhiteMaskGradient(mask: ArrayLike<number>): string;
+export function buildWhiteMaskGradient(
+  samples: ReadonlyArray<SceneAtmosphere>,
+  predicate: (atmo: SceneAtmosphere) => boolean,
+): string;
+export function buildWhiteMaskGradient(
+  arg1: ArrayLike<number> | ReadonlyArray<SceneAtmosphere>,
+  predicate?: (atmo: SceneAtmosphere) => boolean,
+): string {
+  let mask: ArrayLike<number>;
+  if (predicate !== undefined) {
+    const samples = arg1 as ReadonlyArray<SceneAtmosphere>;
+    const raw = new Float32Array(samples.length);
+    for (let i = 0; i < samples.length; i++) {
+      raw[i] = predicate(samples[i]) ? 1 : 0;
+    }
+    mask = smoothMask(raw);
+  } else {
+    mask = arg1 as ArrayLike<number>;
+  }
   const n = mask.length;
   const parts: string[] = ['rgba(255, 255, 255, 0) 0%'];
   for (let i = 0; i < n; i++) {

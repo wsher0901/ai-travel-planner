@@ -212,6 +212,23 @@
   transform-origin: center;
 }
 
+/* Snow particle fall — 12s linear, slight wind drift via the -2% x-translate.
+   Each particle <g> carries this class with a per-particle negative
+   animation-delay so the cycle is staggered (avoids snap-back synchrony). */
+@keyframes snowfall { 0% { transform: translate(0, 0); }  100% { transform: translate(-2%, 100%); } }
+.sky-snowfall { animation: snowfall 12s linear infinite; transform-box: view-box; }
+
+/* StormLayer gust burst — wind streak slide + fade. 600ms total, eased via
+   keyframe stops; opacity 0→1 fast (30%), holds (30→70%), fades 70→100%
+   while continuing to slide. Applied to a <g> when burstActive is true. */
+@keyframes gustBurst {
+  0%   { opacity: 0; transform: translateX(0); }
+  30%  { opacity: 1; transform: translateX(2%); }
+  70%  { opacity: 1; transform: translateX(4%); }
+  100% { opacity: 0; transform: translateX(6%); }
+}
+.sky-gust-burst { animation: gustBurst 600ms ease-out forwards; transform-box: view-box; }
+
 /* Dark cyan scrollbars matching Jarvis palette */
 html ::-webkit-scrollbar,
 body ::-webkit-scrollbar,

@@ -4,15 +4,24 @@ import type { AtmosphereCondition, MockWeather } from './SceneAtmosphere';
 
 // First entry is null = "auto" (use real data from useTripWeather).
 // Remaining entries cycle through every visual condition for QA.
+// 'partly_cloudy' and 'overcast' are separate cycler entries (they were
+// merged under 'cloudy' before the cleanup); both produce distinct
+// conditionTiers so the ambient overlays can be visually distinguished.
+// Snow tiers are cycler-only conditions producing the corresponding
+// conditionTier via hourlyFromMock — no real-data path emits them.
 const CYCLE: (AtmosphereCondition | null)[] = [
   null,
   'sunny',
-  'cloudy',
+  'partly_cloudy',
+  'overcast',
   'foggy',
   'light_rain',
   'moderate_rain',
   'heavy_rain',
   'thunderstorm',
+  'light_snow',
+  'moderate_snow',
+  'heavy_snow',
 ];
 
 const DEFAULT_WIND = { angleDeg: 15, speedMps: 4 };

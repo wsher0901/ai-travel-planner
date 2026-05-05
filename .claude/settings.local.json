@@ -65,7 +65,6 @@
       "mcp__chrome-devtools__select_page"
     ]
   },
-  "model": "sonnet",
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"

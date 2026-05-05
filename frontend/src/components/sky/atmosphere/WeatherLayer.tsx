@@ -12,8 +12,6 @@ import WindyLayer from './conditions/WindyLayer';
 import type { WalkerPreset } from '@/components/sky/types';
 
 interface Props {
-  // Threaded through for the Prompt 3b sun-bloom layer; unused at present.
-  sunPositionPct: { x: number; y: number };
   walkerXPercent: number | null;
   walkerPreset: WalkerPreset;
 }
@@ -21,18 +19,23 @@ interface Props {
 // Layer 3: weather. Sits above Layer 1 (diorama) and Layer 2 (landscape).
 // pointer-events:none — never blocks interactions.
 //
+// After the cleanup pass, all sun-anchored / cloud-shape / band geometry was
+// dropped — the four ambient tiers (sunny / partly-cloudy / overcast / foggy)
+// render only horizontal tint/wash overlays. Particle layers (rain / snow /
+// storm) remain intact.
+//
 // Render order (back → front):
-//   1. FoggyLayer        — fog bands + fog tint/dimming
-//   2. PartlyCloudyLayer — placeholder (Prompt 4)
-//   3. OvercastLayer     — placeholder (Prompt 4)
-//   4. SunnyLayer        — placeholder (Prompt 3b — replaces deleted SunnyGlow)
-//   5. GoldenHourWash    — horizontal golden-hour wash (gated to sunny/partly-cloudy)
+//   1. FoggyLayer        — fog tint/dimming wash (ambient only)
+//   2. PartlyCloudyLayer — partly-cloudy tint wash (ambient only)
+//   3. OvercastLayer     — overcast tint/dimming wash (ambient only)
+//   4. SunnyLayer        — sunny warm wash (ambient only)
+//   5. GoldenHourWash    — horizontal golden-hour wash (sunny/partly-cloudy)
 //   6. WalkerLayer       — "now" figure; above scenery, below precipitation
 //   7. RainLayer         — rain particles + rain tint/dimming
 //   8. SnowLayer         — snow particles
-//   9. StormLayer        — storm rain + lightning + storm tint/dimming
-//  10. WindyLayer        — placeholder (Prompt 3)
-export default function WeatherLayer({ sunPositionPct: _sunPositionPct, walkerXPercent, walkerPreset }: Props) {
+//   9. StormLayer        — storm rain + lightning + gust spikes
+//  10. WindyLayer        — placeholder (parked to weather panel)
+export default function WeatherLayer({ walkerXPercent, walkerPreset }: Props) {
   return (
     <div
       aria-hidden

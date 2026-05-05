@@ -55,19 +55,26 @@ export interface DayWeather {
   daily: DayMeta;
 }
 
-// Back-compat alias for 2A/2C visual components that look up tier-spec maps
-// keyed by a fine-grained condition (e.g. RainField uses 'light_rain' to
-// pick particle counts). 3B will replace these lookups with continuous
-// precipitationIntensity + tier — until then, we derive this from
-// (conditionTier, precipitationIntensity) in atmosphere.ts.
+// Back-compat alias for 2A/2C visual components plus a dev-cycler input
+// vocabulary. 'partly_cloudy', 'overcast', and the three snow tiers are
+// NOT produced by the real pipeline — `deriveAtmosphereCondition` still
+// maps overcast/partly-cloudy/snow tiers to existing values for back-compat.
+// They exist so the dev cycler can synthesize each tier explicitly via
+// hourlyFromMock. 'cloudy' is the runtime back-compat value; 'overcast' is
+// the cycler-only equivalent that produces the same conditionTier.
 export type AtmosphereCondition =
   | 'sunny'
+  | 'partly_cloudy'
   | 'cloudy'
+  | 'overcast'
   | 'foggy'
   | 'light_rain'
   | 'moderate_rain'
   | 'heavy_rain'
-  | 'thunderstorm';
+  | 'thunderstorm'
+  | 'light_snow'
+  | 'moderate_snow'
+  | 'heavy_snow';
 
 // Extended SceneAtmosphere — strict superset of 2A. New fields:
 // precipitationIntensity, fogDensityMultiplier; conditionTier widens to

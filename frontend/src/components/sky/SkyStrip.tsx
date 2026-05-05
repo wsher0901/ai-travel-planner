@@ -7,7 +7,6 @@ import SkyGradient from './layers/SkyGradient';
 import CelestialBodies from './layers/CelestialBodies';
 import Stars from './layers/Stars';
 import Scenery from './layers/Scenery';
-import WeatherLayers from './layers/WeatherLayers';
 import {
   SceneAtmosphereProvider,
   type MockWeather,
@@ -16,8 +15,6 @@ import WeatherLayer from './atmosphere/WeatherLayer';
 import WeatherDevCycler from './atmosphere/WeatherDevCycler';
 import {
   getCurrentMinuteInTimezone,
-  getNoonSunScenePct,
-  getSunScenePctAtMinute,
   minuteToDate,
 } from './atmosphere/sunScenePos';
 
@@ -97,21 +94,6 @@ export default function SkyStrip({
     [sunTimes]
   );
 
-  // Sun position is threaded to the WeatherLayer for the Prompt 3b sun-bloom
-  // (currently unused — the legacy SunnyGlow halo was deleted in 3a).
-  // Dev override → simulated time. Today + sun above horizon → live. Else → noon.
-  const sunPositionPct = useMemo(() => {
-    if (simulatedMinute !== null) {
-      return getSunScenePctAtMinute(sunTimes, simulatedMinute)
-        ?? getNoonSunScenePct(sunTimes) ?? { x: 50, y: 30 };
-    }
-    if (isToday) {
-      const live = getSunScenePctAtMinute(sunTimes, currentMinute);
-      if (live) return live;
-    }
-    return getNoonSunScenePct(sunTimes) ?? { x: 50, y: 30 };
-  }, [isToday, currentMinute, sunTimes, simulatedMinute]);
-
   return (
     <SceneAtmosphereProvider
       tripId={tripId}
@@ -132,9 +114,10 @@ export default function SkyStrip({
         {/* z0: seasonal CSS gradient backdrop */}
         <SkyGradient sunTimes={sunTimes} />
 
-        {/* z1: SVG overlay — stars, weather, and celestial arc.
-            WeatherLayers renders before CelestialBodies so cloud cover sits
-            visually in front of the sun arc (occlusion comes in 2c). */}
+        {/* z1: SVG overlay — stars + celestial arc. (The legacy WeatherLayers
+            cloud renderer was removed; cloud rendering now lives in the
+            atmosphere/conditions/* layers, which paint between this SVG
+            and the WeatherLayer atmosphere div below.) */}
         <svg
           style={{
             position: 'absolute', inset: 0,
@@ -152,7 +135,6 @@ export default function SkyStrip({
             latSeed={lat}
             dateSeed={date}
           />
-          <WeatherLayers segments={weatherSegments} palette={palette} />
           <CelestialBodies
             sunTimes={sunTimes}
             lat={lat}
@@ -169,7 +151,6 @@ export default function SkyStrip({
 
         {/* Layer 3: atmosphere — modulates the whole scene */}
         <WeatherLayer
-          sunPositionPct={sunPositionPct}
           walkerXPercent={walkerXPercent}
           walkerPreset={walker}
         />

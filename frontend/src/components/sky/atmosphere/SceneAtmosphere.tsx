@@ -43,10 +43,12 @@ export const DEFAULT_MOCK_WEATHER: MockWeather = {
 // as real data. Visibility is intentionally large for non-fog conditions
 // so the visibility override in mapping.ts doesn't kick in.
 //
-// NOTE: The cycler enumerates AtmosphereCondition (7 values), not WeatherCondition.
-// 'cloudy' → WMO code 3 → conditionTier 'overcast' (post-3B split). Neither
-// 'partly-cloudy' nor 'snow' conditionTier is reachable via the cycler.
-// Prompt 4/5 will revisit if dev coverage of those tiers is needed.
+// NOTE: The cycler enumerates AtmosphereCondition (12 values incl. null
+// "auto"), not WeatherCondition. Each cycler entry synthesizes a WMO code
+// + cloud cover + precipitation rate that maps through the regular pipeline
+// to its corresponding conditionTier — so partly-cloudy, overcast, and the
+// three snow tiers (light/moderate/heavy) are all reachable from dev QA.
+// 'cloudy' is retained as a legacy alias for overcast.
 function hourlyFromMock(m: MockWeather, hourFloat: number): HourlyWeather {
   const make = (
     code: number,
@@ -75,13 +77,29 @@ function hourlyFromMock(m: MockWeather, hourFloat: number): HourlyWeather {
   });
 
   switch (m.condition) {
-    case 'sunny':         return make(0,  0,   0, 20, 16000);
-    case 'cloudy':        return make(3,  0,   0, 80, 16000);
-    case 'foggy':         return make(45, 0,   0, 90,   500);
-    case 'light_rain':    return make(61, 0.3, 0, 85, 12000);
-    case 'moderate_rain': return make(63, 2,   0, 88, 10000);
-    case 'heavy_rain':    return make(65, 8,   0, 95,  6000);
-    case 'thunderstorm':  return make(95, 6,   0, 95,  6000);
+    case 'sunny':         return make(0,  0,   0,   20, 16000);
+    // Partly-cloudy: WMO 2 + 60% cloud cover → conditionTier 'partly-cloudy'.
+    case 'partly_cloudy': return make(2,  0,   0,   60, 16000);
+    // 'cloudy' (legacy) and 'overcast' (cycler-explicit) both produce the
+    // overcast tier; kept distinct so the cycler can label them.
+    case 'cloudy':
+    case 'overcast':      return make(3,  0,   0,   95, 16000);
+    case 'foggy':         return make(45, 0,   0,   90,   500);
+    case 'light_rain':    return make(61, 0.3, 0,   85, 12000);
+    case 'moderate_rain': return make(63, 2,   0,   88, 10000);
+    case 'heavy_rain':    return make(65, 8,   0,   95,  6000);
+    case 'thunderstorm':  return make(95, 6,   0,   95,  6000);
+    // Snow tiers: visibility kept ≥ 4000 m so the foggy override in
+    // mapToConditionTier doesn't reroute these to 'foggy'.
+    case 'light_snow':    return make(71, 0,   0.3, 90,  8000);
+    case 'moderate_snow': return make(73, 0,   1.5, 92,  6000);
+    case 'heavy_snow':    return make(75, 0,   3.5, 95,  5000);
+    default: {
+      // Exhaustiveness guard — adding a new AtmosphereCondition value
+      // without a case here is a compile error.
+      const _exhaustive: never = m.condition;
+      throw new Error(`Unhandled AtmosphereCondition in hourlyFromMock: ${_exhaustive}`);
+    }
   }
 }
 
