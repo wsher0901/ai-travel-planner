@@ -38,6 +38,13 @@ export const DEFAULT_MOCK_WEATHER: MockWeather = {
   windVector: { angleDeg: 15, speedMps: 4 },
 };
 
+// Cold-cache / genuinely-missing-data fallback — neutral overcast avoids
+// a sunny flash on slide before real data resolves.
+const NO_DATA_FALLBACK_WEATHER: MockWeather = {
+  condition: 'overcast',
+  windVector: { angleDeg: 15, speedMps: 4 },
+};
+
 // Synthesize a representative HourlyWeather row from a cycler condition so
 // dev-cycler atmospheres run through the same getHourlyAtmosphere pipeline
 // as real data. Visibility is intentionally large for non-fog conditions
@@ -196,9 +203,9 @@ export function SceneAtmosphereProvider({
       return deriveAtTime(dayWeather, hourFloat);
     }
 
-    // No real data and no override — bland sunny default keeps visuals happy.
+    // No real data and no override — overcast until network resolves.
     return getHourlyAtmosphere(
-      hourlyFromMock(DEFAULT_MOCK_WEATHER, hourFloat),
+      hourlyFromMock(NO_DATA_FALLBACK_WEATHER, hourFloat),
       fallbackDaily,
       hourFloat,
     );
@@ -227,7 +234,7 @@ export function SceneAtmosphereProvider({
     for (let i = 0; i < ATMOSPHERE_SAMPLES; i++) {
       const hf = sampleIndexToHour(i);
       out[i] = getHourlyAtmosphere(
-        hourlyFromMock(DEFAULT_MOCK_WEATHER, hf),
+        hourlyFromMock(NO_DATA_FALLBACK_WEATHER, hf),
         fallbackDaily,
         hf,
       );

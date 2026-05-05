@@ -215,7 +215,12 @@ export function useTripWeather(tripId: string | null | undefined): UseTripWeathe
   const endDate = tripPlan?.end_date ?? null;
   const planMatchesTripId = tripPlan?.id === tripId;
 
-  const [state, setState] = useState<HookState>(EMPTY_STATE);
+  const [state, setState] = useState<HookState>(() => {
+    if (lat == null || lon == null || !startDate || !endDate) return EMPTY_STATE;
+    const cached = readLocalCache(lat, lon, startDate, endDate);
+    if (!cached) return EMPTY_STATE;
+    return applyWire(cached, startDate, endDate);
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
