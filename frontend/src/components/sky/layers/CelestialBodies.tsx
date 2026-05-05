@@ -7,6 +7,8 @@ import {
   getMoonPositionAtMinute,
   getMoonPeakMinute,
 } from '@/lib/sunPosition';
+import { useSceneWeather } from '../atmosphere/SceneAtmosphere';
+import { smoothMask } from '../atmosphere/maskUtils';
 
 interface Props {
   sunTimes: SunTimes;
@@ -19,6 +21,10 @@ interface Props {
 }
 
 const HALF_PI = Math.PI / 2;
+
+// Tiers where the sun disc should be visible. Smoothed via smoothMask so the
+// sun fades at tier transition boundaries rather than cutting abruptly.
+const SUN_VISIBLE_TIERS = new Set(['sunny', 'partly-cloudy', 'light-snow']);
 const ARC_HORIZON_Y = 215;
 const ARC_APEX_Y    = -90;
 
@@ -84,6 +90,8 @@ export default function CelestialBodies({
   const as = aspectScale ?? 1;
   const moonMaskId = useId();
 
+  const { samples48 } = useSceneWeather();
+
   const hourlyElevations = useMemo(
     () => getHourlySolarElevation(date, lat, lng, timezone),
     [date, lat, lng, timezone],
@@ -131,6 +139,22 @@ export default function CelestialBodies({
   const moonY = (!isNewMoon && moonData !== null && moonData.altitude > 0)
     ? Math.max(20, 100 - (moonData.altitude / HALF_PI) * 80)
     : null;
+
+  // Tier-conditional sun opacity. Sunny/partly-cloudy/light-snow show the sun;
+  // overcast, rain, heavy snow hide it. smoothMask produces a ramp at boundaries.
+  const sunOpacity = useMemo(() => {
+    if (!samples48.length) return 1;
+    const raw = new Float32Array(samples48.length);
+    for (let i = 0; i < samples48.length; i++) {
+      raw[i] = SUN_VISIBLE_TIERS.has(samples48[i].conditionTier) ? 1 : 0;
+    }
+    const smoothed = smoothMask(raw);
+    const sunMinute = isToday
+      ? getCurrentMinuteInTimezone(timezone)
+      : sunTimes.solarNoonMin;
+    const idx = Math.max(0, Math.min(samples48.length - 1, Math.round(sunMinute / 30)));
+    return smoothed[idx] ?? 1;
+  }, [samples48, isToday, timezone, sunTimes.solarNoonMin]);
 
   // Fade moon toward 0.3 opacity during daytime so it reads as "background" sky phenomenon
   const moonOpacity = useMemo(() => {
@@ -226,20 +250,22 @@ export default function CelestialBodies({
         />
       )}
 
-      {/* Solar noon marker — 3-ring illustrative sun */}
-      {noonX !== null && noonY !== null && noonAltitude > 0 && (
-        <g transform={`translate(${noonX.toFixed(1)} ${noonY.toFixed(1)})`}>
+      {/* Solar noon marker — hidden on isToday (live marker takes over, matching moon pattern) */}
+      {!isToday && noonX !== null && noonY !== null && noonAltitude > 0 && (
+        <g transform={`translate(${noonX.toFixed(1)} ${noonY.toFixed(1)})`} style={{ opacity: sunOpacity }}>
           <ellipse rx={28 * as} ry={28} fill="rgba(180, 210, 200, 0.12)" />
           <ellipse rx={16 * as} ry={16} fill="rgba(220, 200, 100, 0.32)" />
           <ellipse rx={9 * as}  ry={9}  fill="#F2CA40" />
         </g>
       )}
 
-      {/* Live "now" marker — position updated imperatively */}
-      <g ref={liveRef} style={{ display: 'none', willChange: 'transform' }}>
-        <ellipse rx={28 * as} ry={28} fill="rgba(180, 210, 200, 0.12)" />
-        <ellipse rx={16 * as} ry={16} fill="rgba(220, 200, 100, 0.32)" />
-        <ellipse rx={9 * as}  ry={9}  fill="#F2CA40" />
+      {/* Live "now" marker — position updated imperatively; outer g applies tier opacity */}
+      <g style={{ opacity: sunOpacity }}>
+        <g ref={liveRef} style={{ display: 'none', willChange: 'transform' }}>
+          <ellipse rx={28 * as} ry={28} fill="rgba(180, 210, 200, 0.12)" />
+          <ellipse rx={16 * as} ry={16} fill="rgba(220, 200, 100, 0.32)" />
+          <ellipse rx={9 * as}  ry={9}  fill="#F2CA40" />
+        </g>
       </g>
 
       {/* Moon — static at peak-altitude hour (hidden on today; live marker takes over) */}

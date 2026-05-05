@@ -66,8 +66,8 @@ function getTierConfig(tier: WeatherCondition): TierConfig {
     case 'overcast':
       return {
         lightness: 0.30,
-        saturation: 0.30,
-        gradient:   { top: '#28425A', mid: '#3F576F', bottom: '#576E84' },
+        saturation: 0.18,
+        gradient:   { top: '#2C3D4E', mid: '#475766', bottom: '#5F6F7E' },
         tint:       [170, 185, 205, 0.14],
         dimming:    0.16,
         intensity:  0.45,
@@ -124,7 +124,7 @@ function getTierConfig(tier: WeatherCondition): TierConfig {
       return {
         lightness: 0.68,
         saturation: 0.15,
-        gradient:   { top: '#8E97A0', mid: '#A2ABB3', bottom: '#B6BCC2' },
+        gradient:   { top: '#C8D5DD', mid: '#D6E0E8', bottom: '#E2EAF0' },
         tint:       [220, 225, 245, 0.10],
         dimming:    0.08,
         intensity:  0.30,
@@ -133,7 +133,7 @@ function getTierConfig(tier: WeatherCondition): TierConfig {
       return {
         lightness: 0.75,
         saturation: 0.10,
-        gradient:   { top: '#9FA9B0', mid: '#B3BBC2', bottom: '#C5CACF' },
+        gradient:   { top: '#D5DDE5', mid: '#E2E8EE', bottom: '#EDF1F4' },
         tint:       [220, 225, 245, 0.16],
         dimming:    0.14,
         intensity:  0.55,
@@ -142,7 +142,7 @@ function getTierConfig(tier: WeatherCondition): TierConfig {
       return {
         lightness: 0.82,
         saturation: 0.05,
-        gradient:   { top: '#B5BDC4', mid: '#C5CCD2', bottom: '#D3D8DD' },
+        gradient:   { top: '#E0E5EA', mid: '#EBEEF1', bottom: '#F3F5F7' },
         tint:       [225, 230, 250, 0.22],
         dimming:    0.20,
         intensity:  0.80,

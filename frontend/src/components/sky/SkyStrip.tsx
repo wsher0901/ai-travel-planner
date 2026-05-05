@@ -114,10 +114,35 @@ export default function SkyStrip({
         {/* z0: seasonal CSS gradient backdrop */}
         <SkyGradient sunTimes={sunTimes} />
 
-        {/* z1: SVG overlay — stars + celestial arc. (The legacy WeatherLayers
-            cloud renderer was removed; cloud rendering now lives in the
-            atmosphere/conditions/* layers, which paint between this SVG
-            and the WeatherLayer atmosphere div below.) */}
+        {/* z0: celestial SVG — sun arc + moon. Sits BELOW Scenery in paint
+            order (same zIndex:0, earlier in DOM) so mountain silhouettes
+            can occlude the horizon sun naturally. */}
+        <svg
+          style={{
+            position: 'absolute', inset: 0,
+            width: '100%', height: '100%',
+            zIndex: 0,
+            pointerEvents: 'none',
+          }}
+          viewBox="0 0 1000 200"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <CelestialBodies
+            sunTimes={sunTimes}
+            lat={lat}
+            lng={lng}
+            timezone={timezone}
+            date={date}
+            isToday={isToday}
+            aspectScale={aspectScale}
+          />
+        </svg>
+
+        {/* Scenery silhouette — paints above celestial SVG (same z0, later in DOM) */}
+        <Scenery preset={scenery} />
+
+        {/* z1: stars SVG — above Scenery so stars are visible against the night sky */}
         <svg
           style={{
             position: 'absolute', inset: 0,
@@ -135,19 +160,7 @@ export default function SkyStrip({
             latSeed={lat}
             dateSeed={date}
           />
-          <CelestialBodies
-            sunTimes={sunTimes}
-            lat={lat}
-            lng={lng}
-            timezone={timezone}
-            date={date}
-            isToday={isToday}
-            aspectScale={aspectScale}
-          />
         </svg>
-
-        {/* Scenery silhouette */}
-        <Scenery preset={scenery} />
 
         {/* Layer 3: atmosphere — modulates the whole scene */}
         <WeatherLayer

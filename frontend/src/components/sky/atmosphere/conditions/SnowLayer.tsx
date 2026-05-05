@@ -116,14 +116,23 @@ export default function SnowLayer() {
   // groups entirely (no SVG mount, no GPU layer for them) — without this,
   // the all-zero masks would still mount the SVG subtrees behind invisible
   // masks.
-  const { lightMask, moderateMask, heavyMask } = useMemo(() => {
-    const anyLight    = samples48.some(inAnySnow);
-    const anyModOrHi  = samples48.some(inModerateOrHeavySnow);
-    const anyHeavy    = samples48.some(inHeavySnow);
+  const {
+    lightMask, moderateMask, heavyMask,
+    lightWashMask, moderateWashMask, heavyWashMask,
+  } = useMemo(() => {
+    const anyLight   = samples48.some(inAnySnow);
+    const anyModOrHi = samples48.some(inModerateOrHeavySnow);
+    const anyHeavy   = samples48.some(inHeavySnow);
+    const isLightOnly    = (atmo: SceneAtmosphere) => atmo.conditionTier === 'light-snow';
+    const isModerateOnly = (atmo: SceneAtmosphere) => atmo.conditionTier === 'moderate-snow';
+    const isHeavyOnly    = (atmo: SceneAtmosphere) => atmo.conditionTier === 'heavy-snow';
     return {
-      lightMask:    anyLight   ? buildWhiteMaskGradient(samples48, inAnySnow)             : null,
-      moderateMask: anyModOrHi ? buildWhiteMaskGradient(samples48, inModerateOrHeavySnow) : null,
-      heavyMask:    anyHeavy   ? buildWhiteMaskGradient(samples48, inHeavySnow)           : null,
+      lightMask:        anyLight   ? buildWhiteMaskGradient(samples48, inAnySnow)             : null,
+      moderateMask:     anyModOrHi ? buildWhiteMaskGradient(samples48, inModerateOrHeavySnow) : null,
+      heavyMask:        anyHeavy   ? buildWhiteMaskGradient(samples48, inHeavySnow)           : null,
+      lightWashMask:    anyLight   ? buildWhiteMaskGradient(samples48, isLightOnly)           : null,
+      moderateWashMask: anyModOrHi ? buildWhiteMaskGradient(samples48, isModerateOnly)        : null,
+      heavyWashMask:    anyHeavy   ? buildWhiteMaskGradient(samples48, isHeavyOnly)           : null,
     };
   }, [samples48]);
 
@@ -131,6 +140,30 @@ export default function SnowLayer() {
 
   return (
     <>
+      {/* Per-tier white wash — brightens sky for each snow tier independently.
+          Separate masks (not cumulative) so light-snow wash doesn't bleed into
+          moderate-snow regions and vice versa. */}
+      {lightWashMask && (
+        <div aria-hidden style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'rgba(255,255,255,0.10)',
+          maskImage: lightWashMask, WebkitMaskImage: lightWashMask,
+        }} />
+      )}
+      {moderateWashMask && (
+        <div aria-hidden style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'rgba(255,255,255,0.18)',
+          maskImage: moderateWashMask, WebkitMaskImage: moderateWashMask,
+        }} />
+      )}
+      {heavyWashMask && (
+        <div aria-hidden style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'rgba(255,255,255,0.25)',
+          maskImage: heavyWashMask, WebkitMaskImage: heavyWashMask,
+        }} />
+      )}
       {lightMask    && <SnowGroup particles={LIGHT_PARTICLES}    mask={lightMask}    />}
       {moderateMask && <SnowGroup particles={MODERATE_PARTICLES} mask={moderateMask} />}
       {heavyMask    && <SnowGroup particles={HEAVY_PARTICLES}    mask={heavyMask}    />}
