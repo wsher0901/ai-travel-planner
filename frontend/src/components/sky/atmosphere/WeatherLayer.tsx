@@ -1,5 +1,4 @@
 'use client';
-import GoldenHourWash from './GoldenHourWash';
 import FoggyLayer from './conditions/FoggyLayer';
 import PartlyCloudyLayer from './conditions/PartlyCloudyLayer';
 import OvercastLayer from './conditions/OvercastLayer';
@@ -17,11 +16,10 @@ import WindyLayer from './conditions/WindyLayer';
 //   2. PartlyCloudyLayer — partly-cloudy tint wash (ambient only)
 //   3. OvercastLayer     — overcast tint/dimming wash (ambient only)
 //   4. SunnyLayer        — sunny warm wash (ambient only)
-//   5. GoldenHourWash    — horizontal golden-hour wash (sunny/partly-cloudy)
-//   6. RainLayer         — rain particles + rain tint/dimming
-//   7. SnowLayer         — snow particles
-//   8. StormLayer        — storm rain + lightning + gust spikes
-//   9. WindyLayer        — placeholder (parked to weather panel)
+//   5. RainLayer         — rain particles + rain tint/dimming
+//   6. SnowLayer         — snow particles
+//   7. StormLayer        — storm rain + lightning + gust spikes
+//   8. WindyLayer        — placeholder (parked to weather panel)
 export default function WeatherLayer() {
   return (
     <div
@@ -38,7 +36,6 @@ export default function WeatherLayer() {
       <PartlyCloudyLayer />
       <OvercastLayer />
       <SunnyLayer />
-      <GoldenHourWash />
       <RainLayer />
       <SnowLayer />
       <StormLayer />

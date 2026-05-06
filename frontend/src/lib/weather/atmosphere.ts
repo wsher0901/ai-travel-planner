@@ -13,8 +13,6 @@ import type {
   WeatherCondition,
 } from './types';
 
-const GOLDEN_HOUR_WINDOW_MIN = 45;
-
 export interface TierGradient {
   top: string;    // hex — sky zenith
   mid: string;    // hex — middle band
@@ -161,10 +159,7 @@ function clockMinutes(d: Date): number {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-function computeSunMood(
-  tier: WeatherCondition,
-  goldenHourActive: boolean,
-): SunMood {
+function computeSunMood(tier: WeatherCondition): SunMood {
   switch (tier) {
     case 'thunderstorm':
       return 'hidden';
@@ -175,14 +170,11 @@ function computeSunMood(
     case 'light-snow':
     case 'moderate-snow':
     case 'heavy-snow':
-      return 'muted';
-    // Heavy cloud cover dims the sun even without precipitation.
     case 'overcast':
-      return goldenHourActive ? 'warm' : 'muted';
-    // Only clear-sky tiers get full golden-hour warmth.
+      return 'muted';
     case 'sunny':
     case 'partly-cloudy':
-      return goldenHourActive ? 'warm' : 'normal';
+      return 'normal';
     default: {
       const _exhaustive: never = tier;
       throw new Error(`Unhandled WeatherCondition in computeSunMood: ${_exhaustive}`);
@@ -207,33 +199,14 @@ export function getHourlyAtmosphere(
   const sunsetMin = clockMinutes(daily.sunset);
   const currentMin = hourFloat * 60;
 
-  const minutesFromSunrise = Math.abs(currentMin - sunriseMin);
-  const minutesFromSunset = Math.abs(currentMin - sunsetMin);
-  const nearGolden =
-    minutesFromSunrise <= GOLDEN_HOUR_WINDOW_MIN ||
-    minutesFromSunset <= GOLDEN_HOUR_WINDOW_MIN;
-
-  // Only clear-sky tiers qualify for golden-hour warming. Overcast no longer
-  // qualifies (Prompt 3a) — its sun is muted regardless of clock time.
-  const goldenHourActive = nearGolden && (
-    tier === 'sunny' || tier === 'partly-cloudy'
-  );
-
-  let r = r0, g = g0, b = b0;
-  if (goldenHourActive) {
-    r = Math.min(255, r0 * 1.15);
-    g = Math.min(255, g0 * 1.15);
-  }
-
   const sunVisible = currentMin >= sunriseMin && currentMin <= sunsetMin;
-  const sunMood = computeSunMood(tier, goldenHourActive);
+  const sunMood = computeSunMood(tier);
 
   return {
-    tint: { r, g, b, a },
+    tint: { r: r0, g: g0, b: b0, a },
     dimming: cfg.dimming,
     sunVisible,
     sunMood,
-    goldenHourActive,
     windVector: { angleDeg: h.windAngleDeg, speedMps: h.windSpeedMps },
     conditionTier: tier,
     precipitationIntensity: precip,
@@ -376,11 +349,9 @@ export function getAtmosphereAtTime(
     },
     dimming: lerp(aLow.dimming, aHigh.dimming, factor),
     // Sun-related discrete fields: take the slot whose hour boundary the
-    // moment actually sits in (hLow). sunVisible/sunMood/goldenHourActive
-    // are recomputed from the integer hour anchor.
+    // moment actually sits in (hLow).
     sunVisible: aLow.sunVisible,
     sunMood: aLow.sunMood,
-    goldenHourActive: aLow.goldenHourActive,
     windVector: {
       angleDeg: lerpAngle(aLow.windVector.angleDeg, aHigh.windVector.angleDeg, factor),
       speedMps: lerp(aLow.windVector.speedMps, aHigh.windVector.speedMps, factor),

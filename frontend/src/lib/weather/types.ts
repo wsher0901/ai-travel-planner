@@ -84,7 +84,6 @@ export interface SceneAtmosphere {
   dimming: number;
   sunVisible: boolean;
   sunMood: SunMood;
-  goldenHourActive: boolean;
   windVector: { angleDeg: number; speedMps: number };
   conditionTier: WeatherCondition;
   precipitationIntensity: PrecipitationIntensity;
